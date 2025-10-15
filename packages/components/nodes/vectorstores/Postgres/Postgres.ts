@@ -1,13 +1,12 @@
-import { flatten } from 'lodash'
 import { Document } from '@langchain/core/documents'
+import { VectorStore } from '@langchain/core/vectorstores'
+import { flatten } from 'lodash'
+import { index } from '../../../src/indexing'
 import { ICommonObject, INode, INodeData, INodeOutputsValue, INodeParams, IndexingResult } from '../../../src/Interface'
 import { FLOWISE_CHATID, getBaseClasses } from '../../../src/utils'
-import { index } from '../../../src/indexing'
 import { howToUseFileUpload } from '../VectorStoreUtils'
-import { VectorStore } from '@langchain/core/vectorstores'
 import { VectorStoreDriver } from './driver/Base'
-import { TypeORMDriver } from './driver/TypeORM'
-// import { PGVectorDriver } from './driver/PGVector'
+import { PGVectorDriver } from './driver/PGVector'
 import { getContentColumnName, getDatabase, getHost, getPort, getTableName } from './utils'
 
 const serverCredentialsExists = !!process.env.POSTGRES_VECTORSTORE_USER && !!process.env.POSTGRES_VECTORSTORE_PASSWORD
@@ -119,25 +118,6 @@ class Postgres_VectorStores implements INode {
                 additionalParams: true,
                 optional: true
             },
-            /*{
-                label: 'Driver',
-                name: 'driver',
-                type: 'options',
-                default: 'typeorm',
-                description: 'Different option to connect to Postgres',
-                options: [
-                    {
-                        label: 'TypeORM',
-                        name: 'typeorm'
-                    },
-                    {
-                        label: 'PGVector',
-                        name: 'pgvector'
-                    }
-                ],
-                optional: true,
-                additionalParams: true
-            },*/
             {
                 label: 'Distance Strategy',
                 name: 'distanceStrategy',
@@ -248,20 +228,28 @@ class Postgres_VectorStores implements INode {
 
             try {
                 if (recordManager) {
-                    const vectorStore = await vectorStoreDriver.instanciate()
+                    const vectorStore: any = await vectorStoreDriver.instanciate()
 
                     await recordManager.createSchema()
 
-                    const res = await index({
-                        docsSource: finalDocs,
-                        recordManager,
-                        vectorStore,
-                        options: {
-                            cleanup: recordManager?.cleanup,
-                            sourceIdKey: recordManager?.sourceIdKey ?? 'source',
-                            vectorStoreName: tableName
+                    let res: Partial<IndexingResult>
+                    try {
+                        res = await index({
+                            docsSource: finalDocs,
+                            recordManager,
+                            vectorStore,
+                            options: {
+                                cleanup: recordManager?.cleanup,
+                                sourceIdKey: recordManager?.sourceIdKey ?? 'source',
+                                vectorStoreName: tableName
+                            }
+                        })
+                    } finally {
+                        if (vectorStore?.client) {
+                            vectorStore.client.release()
+                            vectorStore.client = undefined
                         }
-                    })
+                    }
 
                     return res
                 } else {
@@ -333,15 +321,7 @@ class Postgres_VectorStores implements INode {
     }
 
     static getDriverFromConfig(nodeData: INodeData, options: ICommonObject): VectorStoreDriver {
-        /*switch (nodeData.inputs?.driver) {
-            case 'typeorm':
-                return new TypeORMDriver(nodeData, options)
-            case 'pgvector':
-                return new PGVectorDriver(nodeData, options)
-            default:
-                return new TypeORMDriver(nodeData, options)
-        }*/
-        return new TypeORMDriver(nodeData, options)
+        return new PGVectorDriver(nodeData, options)
     }
 }
 

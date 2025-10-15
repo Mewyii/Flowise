@@ -1,7 +1,7 @@
-import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
-import { getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
 import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
 import { DataSource } from 'typeorm'
+import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
+import { getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
 import { getHost, getSSL } from '../../vectorstores/Postgres/utils'
 import { getDatabase, getPort, getTableName } from './utils'
 
@@ -222,11 +222,11 @@ class PostgresRecordManager implements RecordManagerInterface {
     }
 
     async createSchema(): Promise<void> {
-        try {
-            const dataSource = await this.getDataSource()
-            const queryRunner = dataSource.createQueryRunner()
-            const tableName = this.sanitizeTableName(this.tableName)
+        const dataSource = await this.getDataSource()
+        const queryRunner = dataSource.createQueryRunner()
+        const tableName = this.sanitizeTableName(this.tableName)
 
+        try {
             await queryRunner.manager.query(`
   CREATE TABLE IF NOT EXISTS "${tableName}" (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -251,6 +251,8 @@ class PostgresRecordManager implements RecordManagerInterface {
                 return
             }
             throw e
+        } finally {
+            await dataSource.destroy()
         }
     }
 
