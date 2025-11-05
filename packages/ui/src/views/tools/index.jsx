@@ -1,30 +1,30 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // material-ui
-import { Box, Stack, ButtonGroup, Skeleton, ToggleButtonGroup, ToggleButton } from '@mui/material'
+import { Box, ButtonGroup, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 
 // project imports
-import MainCard from '@/ui-component/cards/MainCard'
-import ItemCard from '@/ui-component/cards/ItemCard'
-import ToolDialog from './ToolDialog'
-import ViewHeader from '@/layout/MainLayout/ViewHeader'
 import ErrorBoundary from '@/ErrorBoundary'
-import { ToolsTable } from '@/ui-component/table/ToolsListTable'
+import ViewHeader from '@/layout/MainLayout/ViewHeader'
 import { PermissionButton, StyledPermissionButton } from '@/ui-component/button/RBACButtons'
+import ItemCard from '@/ui-component/cards/ItemCard'
+import MainCard from '@/ui-component/cards/MainCard'
 import TablePagination, { DEFAULT_ITEMS_PER_PAGE } from '@/ui-component/pagination/TablePagination'
+import { ToolsTable } from '@/ui-component/table/ToolsListTable'
+import ToolDialog from './ToolDialog'
 
 // API
 import toolsApi from '@/api/tools'
 
 // Hooks
 import useApi from '@/hooks/useApi'
-import { useError } from '@/store/context/ErrorContext'
 import { gridSpacing } from '@/store/constant'
+import { useError } from '@/store/context/ErrorContext'
 
 // icons
-import { IconPlus, IconFileUpload, IconLayoutGrid, IconList } from '@tabler/icons-react'
 import ToolEmptySVG from '@/assets/images/tools_empty.svg'
+import { IconFileUpload, IconLayoutGrid, IconList, IconPlus } from '@tabler/icons-react'
 
 // ==============================|| TOOLS ||============================== //
 
@@ -42,12 +42,13 @@ const Tools = () => {
 
     /* Table Pagination */
     const [currentPage, setCurrentPage] = useState(1)
-    const [pageLimit, setPageLimit] = useState(DEFAULT_ITEMS_PER_PAGE)
+    const [pageLimit, setPageLimit] = useState(localStorage.getItem('toolsPageSize') || DEFAULT_ITEMS_PER_PAGE)
     const [total, setTotal] = useState(0)
 
     const onChange = (page, pageLimit) => {
         setCurrentPage(page)
         setPageLimit(pageLimit)
+        localStorage.setItem('toolsPageSize', pageLimit)
         refresh(page, pageLimit)
     }
 
