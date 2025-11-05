@@ -1,10 +1,10 @@
 import { ICommonObject } from 'flowise-components'
-import { DocumentStore } from './database/entities/DocumentStore'
 import { DataSource } from 'typeorm'
-import { IComponentNodes } from './Interface'
-import { Telemetry } from './utils/telemetry'
 import { CachePool } from './CachePool'
+import { DocumentStore } from './database/entities/DocumentStore'
+import { IComponentNodes } from './Interface'
 import { UsageCacheManager } from './UsageCacheManager'
+import { Telemetry } from './utils/telemetry'
 
 export enum DocumentStoreStatus {
     EMPTY_SYNC = 'EMPTY',
@@ -14,6 +14,15 @@ export enum DocumentStoreStatus {
     NEW = 'NEW',
     UPSERTING = 'UPSERTING',
     UPSERTED = 'UPSERTED'
+}
+
+export interface FileMetaData {
+    id: string
+    name: string
+    mimePrefix: string
+    size: number
+    status: string
+    uploaded: Date
 }
 
 export interface IDocumentStore {

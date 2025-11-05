@@ -1,6 +1,7 @@
 import { Document } from '@langchain/core/documents'
 import {
     addArrayFilesToStorage,
+    addFilesToStorage,
     addSingleFileToStorage,
     getFileFromStorage,
     getFileFromUpload,
@@ -10,7 +11,8 @@ import {
     mapMimeTypeToInputField,
     removeFilesFromStorage,
     removeSpecificFileFromStorage,
-    removeSpecificFileFromUpload
+    removeSpecificFileFromUpload,
+    removeSpecificFilesFromStorage
 } from 'flowise-components'
 import { StatusCodes } from 'http-status-codes'
 import { cloneDeep, omit } from 'lodash'
@@ -22,6 +24,7 @@ import {
     ChatType,
     DocumentStoreDTO,
     DocumentStoreStatus,
+    FileMetaData,
     IComponentNodes,
     IDocumentStoreFileChunkPagedResponse,
     IDocumentStoreLoader,
@@ -535,7 +538,7 @@ const _saveFileToStorage = async (
         mime = mimePrefix.split(';')[0].split(':')[1]
     }
     const { totalSize } = await addSingleFileToStorage(mime, bf, filename, orgId, DOCUMENT_STORE_BASE_FOLDER, entity.id)
-    await updateStorageUsage(orgId, workspaceId, totalSize, usageCacheManager)
+    updateStorageUsage(orgId, workspaceId, totalSize, usageCacheManager)
 
     return {
         id: uuidv4(),
@@ -545,6 +548,37 @@ const _saveFileToStorage = async (
         status: DocumentStoreStatus.NEW,
         uploaded: new Date()
     }
+}
+
+const _saveFilesToStorage = async (
+    filesBase64: string[],
+    entity: DocumentStore,
+    orgId: string,
+    workspaceId: string,
+    subscriptionId: string,
+    usageCacheManager: UsageCacheManager
+) => {
+    let filesMetaData: FileMetaData[] = []
+    await checkStorage(orgId, subscriptionId, usageCacheManager)
+
+    const fileData = filesBase64.map((fileBase64) => {
+        const splitDataURI = fileBase64.split(',')
+        const name = splitDataURI.pop()?.split(':')[1] ?? ''
+        const base64Payload = splitDataURI.pop() || ''
+        const mimePrefix = splitDataURI.pop()
+        let mime = ''
+        if (mimePrefix) {
+            mime = mimePrefix.split(';')[0].split(':')[1]
+        }
+        return { mime, base64Payload, name }
+    })
+
+    const { totalSize, processedFileData } = await addFilesToStorage(fileData, orgId, DOCUMENT_STORE_BASE_FOLDER, entity.id)
+    updateStorageUsage(orgId, workspaceId, totalSize, usageCacheManager)
+
+    filesMetaData = processedFileData
+
+    return filesMetaData
 }
 
 const _splitIntoChunks = async (appDataSource: DataSource, componentNodes: IComponentNodes, data: IDocumentStoreLoaderForPreview) => {
@@ -931,26 +965,25 @@ const _saveChunksToStorage = async (
                 existingLoaders.splice(index, 1)
                 if (!data.rehydrated) {
                     if (loader.files) {
-                        loader.files.map(async (file: IDocumentStoreLoaderFile) => {
-                            try {
-                                const { totalSize } = await removeSpecificFileFromStorage(
-                                    orgId,
-                                    DOCUMENT_STORE_BASE_FOLDER,
-                                    entity.id,
-                                    file.name
-                                )
-                                await updateStorageUsage(orgId, workspaceId, totalSize, usageCacheManager)
-                            } catch (error) {
-                                console.error(error)
-                            }
-                        })
+                        try {
+                            const { totalSize } = await removeSpecificFilesFromStorage(
+                                loader.files.map((x: { name: string }) => x.name),
+                                orgId,
+                                DOCUMENT_STORE_BASE_FOLDER,
+                                entity.id
+                            )
+
+                            updateStorageUsage(orgId, workspaceId, totalSize, usageCacheManager)
+                        } catch (error) {
+                            console.error(error)
+                        }
                     }
                 }
             }
         }
 
         //step 4: save new file to storage
-        let filesWithMetadata = []
+        let filesWithMetadata: FileMetaData[] = []
         const keys = Object.getOwnPropertyNames(data.loaderConfig)
         for (let i = 0; i < keys.length; i++) {
             const input = data.loaderConfig[keys[i]]
@@ -964,14 +997,10 @@ const _saveChunksToStorage = async (
             if (input.startsWith('[') && input.endsWith(']')) {
                 const files = JSON.parse(input)
                 const fileNames: string[] = []
-                for (let j = 0; j < files.length; j++) {
-                    const file = files[j]
-                    if (re.test(file)) {
-                        const fileMetadata = await _saveFileToStorage(file, entity, orgId, workspaceId, subscriptionId, usageCacheManager)
-                        fileNames.push(fileMetadata.name)
-                        filesWithMetadata.push(fileMetadata)
-                    }
-                }
+                const validatedFiles = files.filter((f: string) => re.test(f))
+                filesWithMetadata = await _saveFilesToStorage(validatedFiles, entity, orgId, workspaceId, subscriptionId, usageCacheManager)
+                fileNames.push(...filesWithMetadata.map((fm) => fm.name))
+
                 data.loaderConfig[keys[i]] = 'FILE-STORAGE::' + JSON.stringify(fileNames)
             } else if (re.test(input)) {
                 const fileNames: string[] = []

@@ -10,8 +10,10 @@ import {
 import { Storage } from '@google-cloud/storage'
 import fs from 'fs'
 import { Readable } from 'node:stream'
+import pLimit from 'p-limit'
 import path from 'path'
 import sanitize from 'sanitize-filename'
+import { v4 as uuidv4 } from 'uuid'
 import { getUserHome } from './utils'
 import { isPathTraversal, isValidUUID } from './validator'
 
@@ -237,6 +239,131 @@ export const addSingleFileToStorage = async (
         const totalSize = await dirSize(path.join(getStoragePath(), paths[0]))
         return { path: 'FILE-STORAGE::' + sanitizedFilename, totalSize: totalSize / 1024 / 1024 }
     }
+}
+
+export const addFilesToStorage = async (
+    fileData: {
+        mime: string
+        base64Payload: string
+        name: string
+    }[],
+    ...paths: string[]
+): Promise<{
+    processedFileData: {
+        id: string
+        name: string
+        mimePrefix: string
+        size: number
+        status: string
+        uploaded: Date
+        path: string
+    }[]
+    totalSize: number
+}> => {
+    let processedFileData: {
+        id: string
+        name: string
+        mimePrefix: string
+        size: number
+        status: string
+        uploaded: Date
+        path: string
+    }[] = []
+    const storageType = getStorageType()
+
+    if (storageType === 's3') {
+        const { s3Client, Bucket } = getS3Config()
+
+        for (const file of fileData) {
+            const sanitizedFilename = _sanitizeFilename(file.name)
+            const bf = Buffer.from(file.base64Payload, 'base64')
+
+            let Key = paths.reduce((acc, cur) => acc + '/' + cur, '') + '/' + sanitizedFilename
+            if (Key.startsWith('/')) {
+                Key = Key.substring(1)
+            }
+
+            const putObjCmd = new PutObjectCommand({
+                Bucket,
+                Key,
+                ContentEncoding: 'base64',
+                ContentType: file.mime,
+                Body: bf
+            })
+            await s3Client.send(putObjCmd)
+
+            processedFileData.push({
+                id: uuidv4(),
+                name: sanitizedFilename,
+                path: 'FILE-STORAGE::' + sanitizedFilename,
+                size: bf.length,
+                status: 'NEW',
+                uploaded: new Date(),
+                mimePrefix: file.mime
+            })
+        }
+    } else if (storageType === 'gcs') {
+        const { bucket } = getGcsClient()
+
+        for (const file of fileData) {
+            const sanitizedFilename = _sanitizeFilename(file.name)
+            const bf = Buffer.from(file.base64Payload, 'base64')
+
+            const normalizedPaths = paths.map((p) => p.replace(/\\/g, '/'))
+            const normalizedFilename = sanitizedFilename.replace(/\\/g, '/')
+            const filePath = [...normalizedPaths, normalizedFilename].join('/')
+            const fileToUpload = bucket.file(filePath)
+            await new Promise<void>((resolve, reject) => {
+                fileToUpload
+                    .createWriteStream({ contentType: file.mime, metadata: { contentEncoding: 'base64' } })
+                    .on('error', (err) => reject(err))
+                    .on('finish', () => resolve())
+                    .end(bf)
+            })
+
+            processedFileData.push({
+                id: uuidv4(),
+                name: sanitizedFilename,
+                path: 'FILE-STORAGE::' + sanitizedFilename,
+                size: bf.length,
+                status: 'NEW',
+                uploaded: new Date(),
+                mimePrefix: file.mime
+            })
+        }
+    } else {
+        const limit = pLimit(5)
+
+        const results = await Promise.allSettled(
+            fileData.map((file) =>
+                limit(async () => {
+                    const sanitizedFilename = _sanitizeFilename(file.name)
+                    const bf = Buffer.from(file.base64Payload, 'base64')
+
+                    const dir = path.join(getStoragePath(), ...paths.map(_sanitizeFilename))
+                    if (!dirExists(dir)) {
+                        await fs.promises.mkdir(dir, { recursive: true })
+                    }
+                    const filePath = path.join(dir, sanitizedFilename)
+                    await fs.promises.writeFile(filePath, bf)
+
+                    return {
+                        id: uuidv4(),
+                        name: sanitizedFilename,
+                        path: 'FILE-STORAGE::' + sanitizedFilename,
+                        size: bf.length,
+                        status: 'NEW',
+                        uploaded: new Date(),
+                        mimePrefix: file.mime
+                    }
+                })
+            )
+        )
+        processedFileData = results.filter((x) => x.status === 'fulfilled').map((x) => x.value)
+    }
+
+    const { totalSize } = await getStorageSizeForType(storageType, paths[0])
+    return { processedFileData, totalSize }
 }
 
 export const getFileFromUpload = async (filePath: string): Promise<Buffer> => {
@@ -637,6 +764,68 @@ export const removeSpecificFileFromStorage = async (...paths: string[]) => {
         const totalSize = await dirSize(path.join(getStoragePath(), paths[0]))
         return { totalSize: totalSize / 1024 / 1024 }
     }
+}
+
+export const removeSpecificFilesFromStorage = async (fileNames: string[], ...paths: string[]) => {
+    const safeBasePath = paths
+        .map((p) => p.replace(/\\/g, '/'))
+        .filter(Boolean)
+        .join('/')
+        .replace(/^\//, '')
+
+    const storageType = getStorageType()
+    if (storageType === 's3') {
+        for (const fileName of fileNames) {
+            const sanitizedFilename = _sanitizeFilename(fileName)
+            await _deleteS3Folder(`${safeBasePath}/${sanitizedFilename}`)
+        }
+    } else if (storageType === 'gcs') {
+        const { bucket } = getGcsClient()
+        const limit = pLimit(10)
+
+        await Promise.allSettled(
+            fileNames.map((file) =>
+                limit(async () => {
+                    const sanitizedFilename = _sanitizeFilename(file)
+                    const filePath = [safeBasePath, sanitizedFilename].join('/')
+                    try {
+                        await bucket.file(filePath).delete()
+                        return { file: filePath, ok: true }
+                    } catch (err: any) {
+                        if (err?.code === 404 || err?.code === '404') {
+                            return { file: filePath, ok: false, reason: 'not-found' }
+                        }
+                        return { file: filePath, ok: false, reason: err }
+                    }
+                })
+            )
+        )
+    } else {
+        const directoryPath = path.join(getStoragePath(), safeBasePath)
+        const limit = pLimit(10)
+
+        await Promise.allSettled(
+            fileNames.map((file) =>
+                limit(async () => {
+                    const sanitizedFilename = _sanitizeFilename(file)
+                    const filePath = path.join(directoryPath, sanitizedFilename)
+                    try {
+                        const stat = await fs.promises.stat(filePath).catch(() => null)
+                        if (stat?.isFile()) {
+                            await fs.promises.unlink(filePath)
+                            return { file: filePath, ok: true }
+                        }
+                        return { file: filePath, ok: false, reason: 'not-found' }
+                    } catch (err) {
+                        console.warn('Local file delete failed', filePath, err)
+                        return { file: filePath, ok: false, reason: err }
+                    }
+                })
+            )
+        )
+    }
+
+    return await getStorageSizeForType(storageType, paths[0])
 }
 
 export const removeFolderFromStorage = async (...paths: string[]) => {
@@ -1050,6 +1239,19 @@ export const getGcsClient = () => {
     return { storage, bucket }
 }
 
+export const getStorageSizeForType = async (storageType: string, rootPath: string): Promise<{ totalSize: number }> => {
+    if (storageType === 's3') {
+        const totalSize = await getS3StorageSize(rootPath)
+        return { totalSize: totalSize / 1024 / 1024 }
+    } else if (storageType === 'gcs') {
+        const totalSize = await getGCSStorageSize(rootPath)
+        return { totalSize: totalSize / 1024 / 1024 }
+    } else {
+        const totalSize = await dirSize(path.join(getStoragePath(), rootPath))
+        return { totalSize: totalSize / 1024 / 1024 }
+    }
+}
+
 export const getS3StorageSize = async (orgId: string): Promise<number> => {
     const { s3Client, Bucket } = getS3Config()
     const getCmd = new ListObjectsCommand({
@@ -1105,4 +1307,14 @@ const _sanitizeFilename = (filename: string): string => {
         return sanitizedFilename.replace(/^\.+/, '')
     }
     return ''
+}
+
+const dirExists = async (dir: string): Promise<boolean> => {
+    try {
+        const stats = await fs.promises.stat(dir)
+        return stats.isDirectory()
+    } catch (err: any) {
+        if (err.code === 'ENOENT') return false
+        throw err
+    }
 }
