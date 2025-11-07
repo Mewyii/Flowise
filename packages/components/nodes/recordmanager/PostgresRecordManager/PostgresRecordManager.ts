@@ -223,10 +223,11 @@ class PostgresRecordManager implements RecordManagerInterface {
 
     async createSchema(): Promise<void> {
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
-        const tableName = this.sanitizeTableName(this.tableName)
 
         try {
+            const queryRunner = dataSource.createQueryRunner()
+            const tableName = this.sanitizeTableName(this.tableName)
+
             await queryRunner.manager.query(`
   CREATE TABLE IF NOT EXISTS "${tableName}" (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
