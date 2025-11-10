@@ -1,9 +1,9 @@
-import { VectorStore } from '@langchain/core/vectorstores'
-import { v5 as uuidv5 } from 'uuid'
 import { RecordManagerInterface, UUIDV5_NAMESPACE } from '@langchain/community/indexes/base'
-import { insecureHash } from '@langchain/core/utils/hash'
 import { Document, DocumentInterface } from '@langchain/core/documents'
+import { insecureHash } from '@langchain/core/utils/hash'
+import { VectorStore } from '@langchain/core/vectorstores'
 import { BaseDocumentLoader } from 'langchain/document_loaders/base.js'
+import { v5 as uuidv5 } from 'uuid'
 import { IndexingResult } from './Interface'
 
 type Metadata = Record<string, unknown>
@@ -247,6 +247,8 @@ export async function index(args: IndexArgs): Promise<IndexingResult> {
 
     const sourceIdAssigner = _getSourceIdAssigner(sourceIdKey ?? null)
 
+    await recordManager.initializeDataSource()
+
     const indexStartDt = await recordManager.getTime()
     let numAdded = 0
     let addedDocs: Document[] = []
@@ -343,6 +345,8 @@ export async function index(args: IndexArgs): Promise<IndexingResult> {
     }
 
     totalKeys = (await recordManager.listKeys({})).length
+
+    await recordManager.destroyDataSource()
 
     return {
         numAdded,

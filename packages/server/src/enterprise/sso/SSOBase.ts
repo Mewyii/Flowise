@@ -1,19 +1,19 @@
 // SSOBase.ts
 import express from 'express'
+import { StatusCodes } from 'http-status-codes'
 import passport from 'passport'
-import { IAssignedWorkspace, LoggedInUser } from '../Interface.Enterprise'
+import { InternalFlowiseError } from '../../errors/internalFlowiseError'
+import { Platform } from '../../Interface'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
+import { GeneralRole } from '../database/entities/role.entity'
+import { UserStatus } from '../database/entities/user.entity'
+import { WorkspaceUser } from '../database/entities/workspace-user.entity'
+import { IAssignedWorkspace, LoggedInUser } from '../Interface.Enterprise'
+import { AccountService } from '../services/account.service'
+import { OrganizationService } from '../services/organization.service'
+import { RoleErrorMessage, RoleService } from '../services/role.service'
 import { UserErrorMessage, UserService } from '../services/user.service'
 import { WorkspaceUserService } from '../services/workspace-user.service'
-import { AccountService } from '../services/account.service'
-import { WorkspaceUser } from '../database/entities/workspace-user.entity'
-import { OrganizationService } from '../services/organization.service'
-import { GeneralRole } from '../database/entities/role.entity'
-import { RoleErrorMessage, RoleService } from '../services/role.service'
-import { InternalFlowiseError } from '../../errors/internalFlowiseError'
-import { StatusCodes } from 'http-status-codes'
-import { Platform } from '../../Interface'
-import { UserStatus } from '../database/entities/user.entity'
 
 abstract class SSOBase {
     protected app: express.Application
@@ -145,7 +145,7 @@ abstract class SSOBase {
                 undefined
             )
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
         }
     }
 }

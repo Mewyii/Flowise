@@ -8,6 +8,7 @@ import { Platform, UserPlan } from '../../Interface'
 import { GeneralErrorMessage } from '../../utils/constants'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { checkUsageLimit } from '../../utils/quotaUsage'
+import { sanitizeUser } from '../../utils/sanitize.util'
 import { OrganizationUser, OrganizationUserStatus } from '../database/entities/organization-user.entity'
 import { Organization, OrganizationName } from '../database/entities/organization.entity'
 import { GeneralRole, Role } from '../database/entities/role.entity'
@@ -15,6 +16,7 @@ import { User, UserStatus } from '../database/entities/user.entity'
 import { WorkspaceUser, WorkspaceUserStatus } from '../database/entities/workspace-user.entity'
 import { Workspace, WorkspaceName } from '../database/entities/workspace.entity'
 import { LoggedInUser, LoginActivityCode } from '../Interface.Enterprise'
+import { destroyAllSessionsForUser } from '../middleware/passport/SessionPersistance'
 import { compareHash } from '../utils/encryption.util'
 import { sendPasswordResetEmail, sendVerificationEmailForCloud, sendWorkspaceAdd, sendWorkspaceInvite } from '../utils/sendEmail'
 import { generateTempToken } from '../utils/tempTokenUtils'
@@ -25,8 +27,6 @@ import { RoleErrorMessage, RoleService } from './role.service'
 import { UserErrorMessage, UserService } from './user.service'
 import { WorkspaceUserErrorMessage, WorkspaceUserService } from './workspace-user.service'
 import { WorkspaceErrorMessage, WorkspaceService } from './workspace.service'
-import { sanitizeUser } from '../../utils/sanitize.util'
-import { destroyAllSessionsForUser } from '../middleware/passport/SessionPersistance'
 
 type AccountDTO = {
     user: Partial<User>
@@ -270,7 +270,7 @@ export class AccountService {
             if (queryRunner && queryRunner.isTransactionActive) await queryRunner.rollbackTransaction()
             throw error
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -436,7 +436,7 @@ export class AccountService {
             if (queryRunner && queryRunner.isTransactionActive) await queryRunner.rollbackTransaction()
             throw error
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
         }
     }
 

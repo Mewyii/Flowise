@@ -1,7 +1,7 @@
+import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
+import { DataSource, QueryRunner } from 'typeorm'
 import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
 import { getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
-import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
-import { DataSource } from 'typeorm'
 
 class MySQLRecordManager_RecordManager implements INode {
     label: string
@@ -170,6 +170,7 @@ class MySQLRecordManager implements RecordManagerInterface {
     config: MySQLRecordManagerOptions
     tableName: string
     namespace: string
+    private dataSource: DataSource | undefined = undefined
 
     constructor(namespace: string, config: MySQLRecordManagerOptions) {
         const { tableName } = config
@@ -191,23 +192,41 @@ class MySQLRecordManager implements RecordManagerInterface {
     }
 
     private async getDataSource(): Promise<DataSource> {
-        const { mysqlOptions } = this.config
-        if (!mysqlOptions) {
-            throw new Error('No datasource options provided')
+        if (this.dataSource) {
+            return this.dataSource
+        } else {
+            const { mysqlOptions } = this.config
+            if (!mysqlOptions) {
+                throw new Error('No datasource options provided')
+            }
+            // Prevent using default Postgres port, otherwise will throw uncaught error and crashing the app
+            if (mysqlOptions.port === 5432) {
+                throw new Error('Invalid port number')
+            }
+            const dataSource = new DataSource(mysqlOptions)
+            await dataSource.initialize()
+            this.dataSource = dataSource
+
+            return dataSource
         }
-        // Prevent using default Postgres port, otherwise will throw uncaught error and crashing the app
-        if (mysqlOptions.port === 5432) {
-            throw new Error('Invalid port number')
+    }
+
+    public async initializeDataSource() {
+        await this.getDataSource()
+    }
+
+    public async destroyDataSource() {
+        if (this.dataSource) {
+            await this.dataSource.destroy()
+            this.dataSource = undefined
         }
-        const dataSource = new DataSource(mysqlOptions)
-        await dataSource.initialize()
-        return dataSource
     }
 
     async createSchema(): Promise<void> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const tableName = this.sanitizeTableName(this.tableName)
 
             await queryRunner.manager.query(`create table if not exists \`${this.sanitizeTableName(tableName)}\` (
@@ -230,8 +249,6 @@ class MySQLRecordManager implements RecordManagerInterface {
                     await queryRunner.manager.query(`CREATE INDEX \`${column}_index\`
         ON \`${tableName}\` (\`${column}\`);`)
             }
-
-            await queryRunner.release()
         } catch (e: any) {
             // This error indicates that the table already exists
             // Due to asynchronous nature of the code, it is possible that
@@ -242,22 +259,22 @@ class MySQLRecordManager implements RecordManagerInterface {
             }
             throw e
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
     async getTime(): Promise<number> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const res = await queryRunner.manager.query(`SELECT UNIX_TIMESTAMP(NOW()) AS epoch`)
-            await queryRunner.release()
             return Number.parseFloat(res[0].epoch)
         } catch (error) {
             console.error('Error getting time in MySQLRecordManager:')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -267,7 +284,7 @@ class MySQLRecordManager implements RecordManagerInterface {
         }
 
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
         const tableName = this.sanitizeTableName(this.tableName)
 
         const updatedAt = await this.getTime()
@@ -291,23 +308,22 @@ class MySQLRecordManager implements RecordManagerInterface {
         ])
 
         const query = `
-            INSERT INTO \`${tableName}\` (\`key\`, \`namespace\`, \`updated_at\`, \`group_id\`)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE \`updated_at\` = VALUES(\`updated_at\`)`
+        INSERT INTO \`${tableName}\` (\`key\`, \`namespace\`, \`updated_at\`, \`group_id\`)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE \`updated_at\` = VALUES(\`updated_at\`)`
 
         // To handle multiple files upsert
         try {
+            queryRunner = dataSource.createQueryRunner()
             for (const record of recordsToUpsert) {
                 // Consider using a transaction for batch operations
                 await queryRunner.manager.query(query, record.flat())
             }
-
-            await queryRunner.release()
         } catch (error) {
             console.error('Error updating in MySQLRecordManager:')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -317,20 +333,21 @@ class MySQLRecordManager implements RecordManagerInterface {
         }
 
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
         const tableName = this.sanitizeTableName(this.tableName)
 
         // Prepare the placeholders and the query
         const placeholders = keys.map(() => `?`).join(', ')
         const query = `
-    SELECT \`key\`
-    FROM \`${tableName}\`
-    WHERE \`namespace\` = ? AND \`key\` IN (${placeholders})`
+        SELECT \`key\`
+        FROM \`${tableName}\`
+        WHERE \`namespace\` = ? AND \`key\` IN (${placeholders})`
 
         // Initialize an array to fill with the existence checks
         const existsArray = new Array(keys.length).fill(false)
 
         try {
+            queryRunner = dataSource.createQueryRunner()
             // Execute the query
             const rows = await queryRunner.manager.query(query, [this.namespace, ...keys.flat()])
             // Create a set of existing keys for faster lookup
@@ -339,19 +356,18 @@ class MySQLRecordManager implements RecordManagerInterface {
             keys.forEach((key, index) => {
                 existsArray[index] = existingKeysSet.has(key)
             })
-            await queryRunner.release()
             return existsArray
         } catch (error) {
             console.error('Error checking existence of keys')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
     async listKeys(options?: ListKeyOptions): Promise<string[]> {
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
         const tableName = this.sanitizeTableName(this.tableName)
 
         try {
@@ -385,14 +401,14 @@ class MySQLRecordManager implements RecordManagerInterface {
             query += ';'
 
             // Directly using try/catch with async/await for cleaner flow
+            queryRunner = dataSource.createQueryRunner()
             const result = await queryRunner.manager.query(query, values)
-            await queryRunner.release()
             return result.map((row: { key: string }) => row.key)
         } catch (error) {
             console.error('MySQLRecordManager listKeys Error: ')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -402,7 +418,7 @@ class MySQLRecordManager implements RecordManagerInterface {
         }
 
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
         const tableName = this.sanitizeTableName(this.tableName)
 
         const placeholders = keys.map(() => '?').join(', ')
@@ -411,13 +427,13 @@ class MySQLRecordManager implements RecordManagerInterface {
 
         // Directly using try/catch with async/await for cleaner flow
         try {
+            queryRunner = dataSource.createQueryRunner()
             await queryRunner.manager.query(query, values)
-            await queryRunner.release()
         } catch (error) {
             console.error('Error deleting keys')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 }

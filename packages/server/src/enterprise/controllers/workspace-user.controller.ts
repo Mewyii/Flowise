@@ -69,7 +69,7 @@ export class WorkspaceUserController {
             if (queryRunner && queryRunner.isTransactionActive) await queryRunner.rollbackTransaction()
             next(error)
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
         }
     }
 

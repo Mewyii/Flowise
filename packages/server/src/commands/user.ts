@@ -21,9 +21,11 @@ export default class user extends BaseCommand {
         const { args } = await this.parse(user)
 
         let queryRunner: QueryRunner | undefined
+
+        logger.info('Initializing DataSource')
+        const dataSource = DataSource.getDataSource()
+
         try {
-            logger.info('Initializing DataSource')
-            const dataSource = await DataSource.getDataSource()
             await dataSource.initialize()
 
             queryRunner = dataSource.createQueryRunner()
@@ -39,7 +41,9 @@ export default class user extends BaseCommand {
         } catch (error) {
             logger.error(error)
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
+            await dataSource.destroy()
+
             await this.gracefullyExit()
         }
     }

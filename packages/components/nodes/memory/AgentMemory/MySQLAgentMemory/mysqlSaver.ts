@@ -1,10 +1,10 @@
-import { BaseCheckpointSaver, Checkpoint, CheckpointMetadata } from '@langchain/langgraph'
-import { RunnableConfig } from '@langchain/core/runnables'
 import { BaseMessage } from '@langchain/core/messages'
-import { DataSource } from 'typeorm'
-import { CheckpointTuple, SaverOptions, SerializerProtocol } from '../interface'
+import { RunnableConfig } from '@langchain/core/runnables'
+import { BaseCheckpointSaver, Checkpoint, CheckpointMetadata } from '@langchain/langgraph'
+import { DataSource, QueryRunner } from 'typeorm'
 import { IMessage, MemoryMethods } from '../../../../src/Interface'
 import { mapChatMessageToBaseMessage } from '../../../../src/utils'
+import { CheckpointTuple, SaverOptions, SerializerProtocol } from '../interface'
 
 export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
     protected isSetup: boolean
@@ -48,8 +48,10 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
     private async setup(dataSource: DataSource): Promise<void> {
         if (this.isSetup) return
 
+        let queryRunner: QueryRunner | undefined
+
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const tableName = this.sanitizeTableName(this.tableName)
             await queryRunner.manager.query(`
                 CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -60,10 +62,11 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
                     metadata BLOB,
                     PRIMARY KEY (thread_id, checkpoint_id)
                 );`)
-            await queryRunner.release()
         } catch (error) {
             console.error(`Error creating ${this.tableName} table`, error)
             throw new Error(`Error creating ${this.tableName} table`)
+        } finally {
+            if (queryRunner) await queryRunner.release()
         }
 
         this.isSetup = true
@@ -71,6 +74,7 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
 
     async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
 
         const thread_id = config.configurable?.thread_id || this.threadId
@@ -78,13 +82,12 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
         const tableName = this.sanitizeTableName(this.tableName)
 
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const sql = checkpoint_id
                 ? `SELECT checkpoint, parent_id, metadata FROM ${tableName} WHERE thread_id = ? AND checkpoint_id = ?`
                 : `SELECT thread_id, checkpoint_id, parent_id, checkpoint, metadata FROM ${tableName} WHERE thread_id = ? ORDER BY checkpoint_id DESC LIMIT 1`
 
             const rows = await queryRunner.manager.query(sql, checkpoint_id ? [thread_id, checkpoint_id] : [thread_id])
-            await queryRunner.release()
 
             if (rows && rows.length > 0) {
                 const row = rows[0]
@@ -111,6 +114,7 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
             console.error(`Error retrieving ${this.tableName}`, error)
             throw new Error(`Error retrieving ${this.tableName}`)
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
         return undefined
@@ -118,8 +122,9 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
 
     async *list(config: RunnableConfig, limit?: number, before?: RunnableConfig): AsyncGenerator<CheckpointTuple, void, unknown> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
-        const queryRunner = dataSource.createQueryRunner()
+
         try {
             const threadId = config.configurable?.thread_id || this.threadId
             const tableName = this.sanitizeTableName(this.tableName)
@@ -131,8 +136,8 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
             }
             const args = [threadId, before?.configurable?.checkpoint_id].filter(Boolean)
 
+            queryRunner = dataSource.createQueryRunner()
             const rows = await queryRunner.manager.query(sql, args)
-            await queryRunner.release()
 
             if (rows && rows.length > 0) {
                 for (const row of rows) {
@@ -160,17 +165,19 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
             console.error(`Error listing checkpoints`, error)
             throw new Error(`Error listing checkpoints`)
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
     }
 
     async put(config: RunnableConfig, checkpoint: Checkpoint, metadata: CheckpointMetadata): Promise<RunnableConfig> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
 
         if (!config.configurable?.checkpoint_id) return {}
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const row = [
                 config.configurable?.thread_id || this.threadId,
                 checkpoint.id,
@@ -185,11 +192,11 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
                            ON DUPLICATE KEY UPDATE checkpoint = VALUES(checkpoint), metadata = VALUES(metadata)`
 
             await queryRunner.manager.query(query, row)
-            await queryRunner.release()
         } catch (error) {
             console.error('Error saving checkpoint', error)
             throw new Error('Error saving checkpoint')
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
 
@@ -205,17 +212,18 @@ export class MySQLSaver extends BaseCheckpointSaver implements MemoryMethods {
         if (!threadId) return
 
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
         const tableName = this.sanitizeTableName(this.tableName)
 
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const query = `DELETE FROM ${tableName} WHERE thread_id = ?;`
             await queryRunner.manager.query(query, [threadId])
-            await queryRunner.release()
         } catch (error) {
             console.error(`Error deleting thread_id ${threadId}`, error)
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
     }

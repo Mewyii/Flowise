@@ -1,15 +1,15 @@
 import { StatusCodes } from 'http-status-codes'
-import { InternalFlowiseError } from '../../errors/internalFlowiseError'
-import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
-import { Telemetry, TelemetryEventType } from '../../utils/telemetry'
-import { User, UserStatus } from '../database/entities/user.entity'
-import { isInvalidEmail, isInvalidName, isInvalidPassword, isInvalidUUID } from '../utils/validation.util'
 import { DataSource, ILike, QueryRunner } from 'typeorm'
+import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { generateId } from '../../utils'
 import { GeneralErrorMessage } from '../../utils/constants'
-import { compareHash, getHash } from '../utils/encryption.util'
+import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { sanitizeUser } from '../../utils/sanitize.util'
+import { Telemetry, TelemetryEventType } from '../../utils/telemetry'
+import { User, UserStatus } from '../database/entities/user.entity'
 import { destroyAllSessionsForUser } from '../middleware/passport/SessionPersistance'
+import { compareHash, getHash } from '../utils/encryption.util'
+import { isInvalidEmail, isInvalidName, isInvalidPassword, isInvalidUUID } from '../utils/validation.util'
 
 export const enum UserErrorMessage {
     EXPIRED_TEMP_TOKEN = 'Expired Temporary Token',
@@ -189,7 +189,7 @@ export class UserService {
             if (queryRunner && queryRunner.isTransactionActive) await queryRunner.rollbackTransaction()
             throw error
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
         }
 
         return sanitizeUser(updatedUser)

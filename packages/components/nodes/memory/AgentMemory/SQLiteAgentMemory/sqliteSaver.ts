@@ -1,10 +1,10 @@
-import { BaseCheckpointSaver, Checkpoint, CheckpointMetadata } from '@langchain/langgraph'
-import { RunnableConfig } from '@langchain/core/runnables'
 import { BaseMessage } from '@langchain/core/messages'
-import { DataSource } from 'typeorm'
-import { CheckpointTuple, SaverOptions, SerializerProtocol } from '../interface'
+import { RunnableConfig } from '@langchain/core/runnables'
+import { BaseCheckpointSaver, Checkpoint, CheckpointMetadata } from '@langchain/langgraph'
+import { DataSource, QueryRunner } from 'typeorm'
 import { IMessage, MemoryMethods } from '../../../../src/Interface'
 import { mapChatMessageToBaseMessage } from '../../../../src/utils'
+import { CheckpointTuple, SaverOptions, SerializerProtocol } from '../interface'
 
 export class SqliteSaver extends BaseCheckpointSaver implements MemoryMethods {
     protected isSetup: boolean
@@ -39,12 +39,14 @@ export class SqliteSaver extends BaseCheckpointSaver implements MemoryMethods {
     }
 
     private async setup(dataSource: DataSource): Promise<void> {
+        let queryRunner: QueryRunner | undefined
+
         if (this.isSetup) {
             return
         }
 
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const tableName = this.sanitizeTableName(this.tableName)
             await queryRunner.manager.query(`
 CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -54,10 +56,11 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
     checkpoint BLOB,
     metadata BLOB,
     PRIMARY KEY (thread_id, checkpoint_id));`)
-            await queryRunner.release()
         } catch (error) {
             console.error(`Error creating ${this.tableName} table`, error)
             throw new Error(`Error creating ${this.tableName} table`)
+        } finally {
+            if (queryRunner) await queryRunner.release()
         }
 
         this.isSetup = true
@@ -65,6 +68,7 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
 
     async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
 
         const thread_id = config.configurable?.thread_id || this.threadId
@@ -73,12 +77,11 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
 
         if (checkpoint_id) {
             try {
-                const queryRunner = dataSource.createQueryRunner()
+                queryRunner = dataSource.createQueryRunner()
                 const keys = [thread_id, checkpoint_id]
                 const sql = `SELECT checkpoint, parent_id, metadata FROM ${tableName} WHERE thread_id = ? AND checkpoint_id = ?`
 
                 const rows = await queryRunner.manager.query(sql, [...keys])
-                await queryRunner.release()
 
                 if (rows && rows.length > 0) {
                     return {
@@ -99,16 +102,16 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
                 console.error(`Error retrieving ${tableName}`, error)
                 throw new Error(`Error retrieving ${tableName}`)
             } finally {
+                if (queryRunner) await queryRunner.release()
                 await dataSource.destroy()
             }
         } else {
             try {
-                const queryRunner = dataSource.createQueryRunner()
+                queryRunner = dataSource.createQueryRunner()
                 const keys = [thread_id]
                 const sql = `SELECT thread_id, checkpoint_id, parent_id, checkpoint, metadata FROM ${tableName} WHERE thread_id = ? ORDER BY checkpoint_id DESC LIMIT 1`
 
                 const rows = await queryRunner.manager.query(sql, [...keys])
-                await queryRunner.release()
 
                 if (rows && rows.length > 0) {
                     return {
@@ -134,6 +137,7 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
                 console.error(`Error retrieving ${tableName}`, error)
                 throw new Error(`Error retrieving ${tableName}`)
             } finally {
+                if (queryRunner) await queryRunner.release()
                 await dataSource.destroy()
             }
         }
@@ -142,9 +146,9 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
 
     async *list(config: RunnableConfig, limit?: number, before?: RunnableConfig): AsyncGenerator<CheckpointTuple> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
 
-        const queryRunner = dataSource.createQueryRunner()
         const thread_id = config.configurable?.thread_id || this.threadId
         const tableName = this.sanitizeTableName(this.tableName)
         let sql = `SELECT thread_id, checkpoint_id, parent_id, checkpoint, metadata FROM ${tableName} WHERE thread_id = ? ${
@@ -156,8 +160,8 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
         const args = [thread_id, before?.configurable?.checkpoint_id].filter(Boolean)
 
         try {
+            queryRunner = dataSource.createQueryRunner()
             const rows = await queryRunner.manager.query(sql, [...args])
-            await queryRunner.release()
 
             if (rows && rows.length > 0) {
                 for (const row of rows) {
@@ -185,17 +189,19 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
             console.error(`Error listing ${tableName}`, error)
             throw new Error(`Error listing ${tableName}`)
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
     }
 
     async put(config: RunnableConfig, checkpoint: Checkpoint, metadata: CheckpointMetadata): Promise<RunnableConfig> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
 
         if (!config.configurable?.checkpoint_id) return {}
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const row = [
                 config.configurable?.thread_id || this.threadId,
                 checkpoint.id,
@@ -207,11 +213,11 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
             const query = `INSERT OR REPLACE INTO ${tableName} (thread_id, checkpoint_id, parent_id, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)`
 
             await queryRunner.manager.query(query, row)
-            await queryRunner.release()
         } catch (error) {
             console.error('Error saving checkpoint', error)
             throw new Error('Error saving checkpoint')
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
 
@@ -229,17 +235,18 @@ CREATE TABLE IF NOT EXISTS ${tableName} (
         }
 
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         await this.setup(dataSource)
         const tableName = this.sanitizeTableName(this.tableName)
         const query = `DELETE FROM "${tableName}" WHERE thread_id = ?;`
 
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             await queryRunner.manager.query(query, [threadId])
-            await queryRunner.release()
         } catch (error) {
             console.error(`Error deleting thread_id ${threadId}`, error)
         } finally {
+            if (queryRunner) await queryRunner.release()
             await dataSource.destroy()
         }
     }

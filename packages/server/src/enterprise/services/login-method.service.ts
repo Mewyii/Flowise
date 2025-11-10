@@ -1,13 +1,12 @@
-import { DataSource, QueryRunner } from 'typeorm'
-import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
-import { isInvalidName, isInvalidUUID } from '../utils/validation.util'
-import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { StatusCodes } from 'http-status-codes'
+import { DataSource, IsNull, QueryRunner } from 'typeorm'
+import { InternalFlowiseError } from '../../errors/internalFlowiseError'
+import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { LoginMethod, LoginMethodStatus } from '../database/entities/login-method.entity'
 import { decrypt, encrypt } from '../utils/encryption.util'
-import { UserErrorMessage, UserService } from './user.service'
+import { isInvalidName, isInvalidUUID } from '../utils/validation.util'
 import { OrganizationErrorMessage, OrganizationService } from './organization.service'
-import { IsNull } from 'typeorm'
+import { UserErrorMessage, UserService } from './user.service'
 
 export const enum LoginMethodErrorMessage {
     INVALID_LOGIN_METHOD_ID = 'Invalid Login Method Id',
@@ -94,7 +93,7 @@ export class LoginMethodService {
             if (queryRunner && !queryRunner.isTransactionActive) await queryRunner.rollbackTransaction()
             throw error
         } finally {
-            if (queryRunner && !queryRunner.isReleased) await queryRunner.release()
+            if (queryRunner) await queryRunner.release()
         }
 
         return newLoginMethod

@@ -1,8 +1,8 @@
+import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
+import path from 'path'
+import { DataSource, QueryRunner } from 'typeorm'
 import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
 import { getBaseClasses, getUserHome } from '../../../src/utils'
-import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
-import { DataSource } from 'typeorm'
-import path from 'path'
 
 class SQLiteRecordManager_RecordManager implements INode {
     label: string
@@ -148,6 +148,7 @@ class SQLiteRecordManager implements RecordManagerInterface {
     tableName: string
     namespace: string
     config: SQLiteRecordManagerOptions
+    private dataSource: DataSource | undefined = undefined
 
     constructor(namespace: string, config: SQLiteRecordManagerOptions) {
         const { tableName } = config
@@ -169,19 +170,38 @@ class SQLiteRecordManager implements RecordManagerInterface {
     }
 
     private async getDataSource(): Promise<DataSource> {
-        const { sqliteOptions } = this.config
-        if (!sqliteOptions) {
-            throw new Error('No datasource options provided')
+        if (this.dataSource) {
+            return this.dataSource
+        } else {
+            const { sqliteOptions } = this.config
+            if (!sqliteOptions) {
+                throw new Error('No datasource options provided')
+            }
+            const dataSource = new DataSource(sqliteOptions)
+            await dataSource.initialize()
+            this.dataSource = dataSource
+
+            return dataSource
         }
-        const dataSource = new DataSource(sqliteOptions)
-        await dataSource.initialize()
-        return dataSource
+    }
+
+    public async initializeDataSource() {
+        await this.getDataSource()
+    }
+
+    public async destroyDataSource() {
+        if (this.dataSource) {
+            await this.dataSource.destroy()
+            this.dataSource = undefined
+        }
     }
 
     async createSchema(): Promise<void> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
+
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const tableName = this.sanitizeTableName(this.tableName)
 
             await queryRunner.manager.query(`
@@ -197,8 +217,6 @@ CREATE INDEX IF NOT EXISTS updated_at_index ON "${tableName}" (updated_at);
 CREATE INDEX IF NOT EXISTS key_index ON "${tableName}" (key);
 CREATE INDEX IF NOT EXISTS namespace_index ON "${tableName}" (namespace);
 CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
-
-            await queryRunner.release()
         } catch (e: any) {
             // This error indicates that the table already exists
             // Due to asynchronous nature of the code, it is possible that
@@ -209,22 +227,22 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
             }
             throw e
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
     async getTime(): Promise<number> {
         const dataSource = await this.getDataSource()
+        let queryRunner: QueryRunner | undefined
         try {
-            const queryRunner = dataSource.createQueryRunner()
+            queryRunner = dataSource.createQueryRunner()
             const res = await queryRunner.manager.query(`SELECT strftime('%s', 'now') AS epoch`)
-            await queryRunner.release()
             return Number.parseFloat(res[0].epoch)
         } catch (error) {
             console.error('Error getting time in SQLiteRecordManager:')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -233,7 +251,7 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
             return
         }
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
         const tableName = this.sanitizeTableName(this.tableName)
 
         const updatedAt = await this.getTime()
@@ -262,17 +280,17 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
         ON CONFLICT (key, namespace) DO UPDATE SET updated_at = excluded.updated_at`
 
         try {
+            queryRunner = dataSource.createQueryRunner()
             // To handle multiple files upsert
             for (const record of recordsToUpsert) {
                 // Consider using a transaction for batch operations
                 await queryRunner.manager.query(query, record.flat())
             }
-            await queryRunner.release()
         } catch (error) {
             console.error('Error updating in SQLiteRecordManager:')
             throw error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -293,9 +311,10 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
         const existsArray = new Array(keys.length).fill(false)
 
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
 
         try {
+            queryRunner = dataSource.createQueryRunner()
             // Execute the query
             const rows = await queryRunner.manager.query(sql, [this.namespace, ...keys.flat()])
             // Create a set of existing keys for faster lookup
@@ -304,13 +323,12 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
             keys.forEach((key, index) => {
                 existsArray[index] = existingKeysSet.has(key)
             })
-            await queryRunner.release()
             return existsArray
         } catch (error) {
             console.error('Error checking existence of keys')
             throw error // Allow the caller to handle the error
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -347,18 +365,18 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
         query += ';'
 
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
 
         // Directly using try/catch with async/await for cleaner flow
         try {
+            queryRunner = dataSource.createQueryRunner()
             const result = await queryRunner.manager.query(query, values)
-            await queryRunner.release()
             return result.map((row: { key: string }) => row.key)
         } catch (error) {
             console.error('Error listing keys.')
             throw error // Re-throw the error to be handled by the caller
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 
@@ -368,7 +386,7 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
         }
 
         const dataSource = await this.getDataSource()
-        const queryRunner = dataSource.createQueryRunner()
+        let queryRunner: QueryRunner | undefined
         const tableName = this.sanitizeTableName(this.tableName)
 
         const placeholders = keys.map(() => '?').join(', ')
@@ -377,13 +395,13 @@ CREATE INDEX IF NOT EXISTS group_id_index ON "${tableName}" (group_id);`)
 
         // Directly using try/catch with async/await for cleaner flow
         try {
+            queryRunner = dataSource.createQueryRunner()
             await queryRunner.manager.query(query, values)
-            await queryRunner.release()
         } catch (error) {
             console.error('Error deleting keys')
             throw error // Re-throw the error to be handled by the caller
         } finally {
-            await dataSource.destroy()
+            if (queryRunner) await queryRunner.release()
         }
     }
 }
