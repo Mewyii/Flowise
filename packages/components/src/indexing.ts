@@ -10,6 +10,11 @@ type Metadata = Record<string, unknown>
 
 type StringOrDocFunc = string | ((doc: DocumentInterface) => string)
 
+type FlowiseRecordManagerInterface = RecordManagerInterface & {
+    initializeDataSource(): Promise<void>
+    destroyDataSource(): Promise<void>
+}
+
 export interface HashedDocumentInterface extends DocumentInterface {
     uid: string
     hash_?: string
@@ -207,7 +212,7 @@ export const _isBaseDocumentLoader = (arg: any): arg is BaseDocumentLoader => {
 
 interface IndexArgs {
     docsSource: BaseDocumentLoader | DocumentInterface[]
-    recordManager: RecordManagerInterface
+    recordManager: FlowiseRecordManagerInterface
     vectorStore: VectorStore
     options?: IndexOptions
 }
@@ -226,7 +231,7 @@ interface IndexArgs {
  *
  * @param {IndexArgs} args
  * @param {BaseDocumentLoader | DocumentInterface[]} args.docsSource The source of documents to index. Can be a DocumentLoader or a list of Documents.
- * @param {RecordManagerInterface} args.recordManager The record manager to use for keeping track of indexed documents.
+ * @param {FlowiseRecordManagerInterface} args.recordManager The record manager to use for keeping track of indexed documents.
  * @param {VectorStore} args.vectorStore The vector store to use for storing the documents.
  * @param {IndexOptions | undefined} args.options Options for indexing.
  * @returns {Promise<IndexingResult>}
