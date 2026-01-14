@@ -326,6 +326,8 @@ const Agentflows = () => {
                                     filterFunction={filterFlows}
                                     updateFlowsApi={getAllAgentflows}
                                     setError={setError}
+                                    currentPage={currentPage}
+                                    pageLimit={pageLimit}
                                 />
                             )}
                             {/* Pagination and Page Size Controls */}
