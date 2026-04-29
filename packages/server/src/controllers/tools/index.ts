@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import toolsService from '../../services/tools'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const createTool = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -53,7 +53,7 @@ const deleteTool = async (req: Request, res: Response, next: NextFunction) => {
 
 const getAllTools = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const apiResponse = await toolsService.getAllTools(req.user?.activeWorkspaceId, page, limit)
         return res.json(apiResponse)
     } catch (error) {

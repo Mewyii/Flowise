@@ -1,9 +1,9 @@
-import { Request, Response, NextFunction } from 'express'
-import variablesService from '../../services/variables'
+import { NextFunction, Request, Response } from 'express'
+import { StatusCodes } from 'http-status-codes'
 import { Variable } from '../../database/entities/Variable'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
-import { StatusCodes } from 'http-status-codes'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import variablesService from '../../services/variables'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const createVariable = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -56,7 +56,7 @@ const deleteVariable = async (req: Request, res: Response, next: NextFunction) =
 
 const getAllVariables = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const workspaceId = req.user?.activeWorkspaceId
         if (!workspaceId) {
             throw new InternalFlowiseError(

@@ -3,7 +3,7 @@ import { StatusCodes } from 'http-status-codes'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { CustomMcpServerAuthType } from '../../Interface'
 import customMcpServersService from '../../services/custom-mcp-servers'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const MAX_PAGE_LIMIT = 500
 const DEFAULT_PAGE = 1
@@ -70,7 +70,7 @@ const getAllCustomMcpServers = async (req: Request, res: Response, next: NextFun
                 `Error: customMcpServersController.getAllCustomMcpServers - workspace not found!`
             )
         }
-        const raw = getPageAndLimitParams(req)
+        const raw = getPageLimitAndSearchParams(req)
         const page = raw.page > 0 ? raw.page : DEFAULT_PAGE
         const limit = raw.limit > 0 ? Math.min(raw.limit, MAX_PAGE_LIMIT) : DEFAULT_LIMIT
         const apiResponse = await customMcpServersService.getAllCustomMcpServers(workspaceId, page, limit)

@@ -9,7 +9,7 @@ import apiKeyService from '../../services/apikey'
 import chatflowsService from '../../services/chatflows'
 import { GeneralErrorMessage } from '../../utils/constants'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 import { checkUsageLimit } from '../../utils/quotaUsage'
 import { RateLimiterManager } from '../../utils/rateLimit'
 import { sanitizeFlowDataForPublicEndpoint } from '../../utils/sanitizeFlowData'
@@ -73,13 +73,14 @@ const deleteChatflow = async (req: Request, res: Response, next: NextFunction) =
 
 const getAllChatflows = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit, searchTerm } = getPageLimitAndSearchParams(req)
 
         const apiResponse = await chatflowsService.getAllChatflows(
             req.query?.type as ChatflowType,
             req.user?.activeWorkspaceId,
             page,
-            limit
+            limit,
+            searchTerm
         )
         return res.json(apiResponse)
     } catch (error) {

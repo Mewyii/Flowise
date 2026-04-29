@@ -1,16 +1,18 @@
-import { InternalFlowiseError } from '../errors/internalFlowiseError'
-import { StatusCodes } from 'http-status-codes'
 import { Request } from 'express'
+import { StatusCodes } from 'http-status-codes'
+import { InternalFlowiseError } from '../errors/internalFlowiseError'
 
 type Pagination = {
     page: number
     limit: number
+    searchTerm?: string
 }
 
-export const getPageAndLimitParams = (req: Request): Pagination => {
+export const getPageLimitAndSearchParams = (req: Request): Pagination => {
     // by default assume no pagination
     let page = -1
     let limit = -1
+    let searchTerm: string | undefined = undefined
     if (req.query.page) {
         // if page is provided, make sure it's a positive number
         page = parseInt(req.query.page as string)
@@ -25,5 +27,8 @@ export const getPageAndLimitParams = (req: Request): Pagination => {
             throw new InternalFlowiseError(StatusCodes.PRECONDITION_FAILED, `Error: limit cannot be negative!`)
         }
     }
-    return { page, limit }
+    if (req.query.searchTerm) {
+        searchTerm = req.query.searchTerm as string
+    }
+    return { page, limit, searchTerm }
 }

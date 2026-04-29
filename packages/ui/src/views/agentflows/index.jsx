@@ -38,7 +38,6 @@ const Agentflows = () => {
     const theme = useTheme()
     const customization = useSelector((state) => state.customization)
 
-    const [isLoading, setLoading] = useState(true)
     const [images, setImages] = useState({})
     const [icons, setIcons] = useState({})
     const [search, setSearch] = useState('')
@@ -64,7 +63,8 @@ const Agentflows = () => {
     const refresh = (page, limit, nextView) => {
         const params = {
             page: page || currentPage,
-            limit: limit || pageLimit
+            limit: limit || pageLimit,
+            searchTerm: search || undefined
         }
         getAllAgentflows.request(nextView === 'v2' ? 'AGENTFLOW' : 'MULTIAGENT', params)
     }
@@ -84,14 +84,6 @@ const Agentflows = () => {
 
     const onSearchChange = (event) => {
         setSearch(event.target.value)
-    }
-
-    function filterFlows(data) {
-        return (
-            data.name.toLowerCase().indexOf(search.toLowerCase()) > -1 ||
-            (data.category && data.category.toLowerCase().indexOf(search.toLowerCase()) > -1) ||
-            data.id.toLowerCase().indexOf(search.toLowerCase()) > -1
-        )
     }
 
     const addNew = () => {
@@ -121,6 +113,16 @@ const Agentflows = () => {
     }, [])
 
     useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            setCurrentPage(1)
+            refresh(1, pageLimit, agentflowVersion)
+        }, 300)
+
+        return () => clearTimeout(timeoutId)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search])
+
+    useEffect(() => {
         if (getAllAgentflows.error) {
             setError(getAllAgentflows.error)
         }
@@ -129,14 +131,10 @@ const Agentflows = () => {
     }, [getAllAgentflows.error])
 
     useEffect(() => {
-        setLoading(getAllAgentflows.loading)
-    }, [getAllAgentflows.loading])
-
-    useEffect(() => {
-        if (getAllAgentflows.data) {
+        if (!getAllAgentflows.loading && getAllAgentflows.data?.data) {
             try {
-                const agentflows = getAllAgentflows.data?.data
-                setTotal(getAllAgentflows.data?.total)
+                const agentflows = getAllAgentflows.data.data
+                setTotal(getAllAgentflows.data.total)
                 const images = {}
                 const icons = {}
                 for (let i = 0; i < agentflows.length; i += 1) {
@@ -167,7 +165,7 @@ const Agentflows = () => {
                 console.error(e)
             }
         }
-    }, [getAllAgentflows.data])
+    }, [getAllAgentflows.loading, getAllAgentflows.data])
 
     return (
         <MainCard>
@@ -301,41 +299,33 @@ const Agentflows = () => {
                             </IconButton>
                         </Box>
                     )}
-                    {!isLoading && total > 0 && (
-                        <>
-                            {!view || view === 'card' ? (
-                                <Box display='grid' gridTemplateColumns='repeat(3, 1fr)' gap={gridSpacing}>
-                                    {getAllAgentflows.data?.data.filter(filterFlows).map((data, index) => (
-                                        <ItemCard
-                                            key={index}
-                                            onClick={() => goToCanvas(data)}
-                                            data={data}
-                                            images={images[data.id]}
-                                            icons={icons[data.id]}
-                                        />
-                                    ))}
-                                </Box>
-                            ) : (
-                                <FlowListTable
-                                    isAgentCanvas={true}
-                                    isAgentflowV2={agentflowVersion === 'v2'}
-                                    data={getAllAgentflows.data?.data}
-                                    images={images}
-                                    icons={icons}
-                                    isLoading={isLoading}
-                                    filterFunction={filterFlows}
-                                    updateFlowsApi={getAllAgentflows}
-                                    setError={setError}
-                                    currentPage={currentPage}
-                                    pageLimit={pageLimit}
+                    {!view || view === 'card' ? (
+                        <Box display='grid' gridTemplateColumns='repeat(3, 1fr)' gap={gridSpacing}>
+                            {getAllAgentflows.data?.data.map((data, index) => (
+                                <ItemCard
+                                    key={index}
+                                    onClick={() => goToCanvas(data)}
+                                    data={data}
+                                    images={images[data.id]}
+                                    icons={icons[data.id]}
                                 />
-                            )}
-                            {/* Pagination and Page Size Controls */}
-                            <TablePagination currentPage={currentPage} limit={pageLimit} total={total} onChange={onChange} />
-                        </>
+                            ))}
+                        </Box>
+                    ) : (
+                        <FlowListTable
+                            isAgentCanvas={true}
+                            isAgentflowV2={agentflowVersion === 'v2'}
+                            data={getAllAgentflows.data?.data}
+                            images={images}
+                            icons={icons}
+                            isLoading={getAllAgentflows.loading}
+                            updateFlowsApi={getAllAgentflows}
+                            setError={setError}
+                            currentPage={currentPage}
+                            pageLimit={pageLimit}
+                        />
                     )}
-
-                    {!isLoading && total === 0 && (
+                    {!getAllAgentflows.loading && total === 0 && (
                         <Stack sx={{ alignItems: 'center', justifyContent: 'center' }} flexDirection='column'>
                             <Box sx={{ p: 2, height: 'auto' }}>
                                 <img
@@ -344,9 +334,11 @@ const Agentflows = () => {
                                     alt='AgentsEmptySVG'
                                 />
                             </Box>
-                            <div>No Agents Yet</div>
+                            {!search && <div>No Agents Yet</div>}
+                            {search && <div>No Agents Found</div>}
                         </Stack>
                     )}
+                    <TablePagination currentPage={currentPage} limit={pageLimit} total={total} onChange={onChange} />
                 </Stack>
             )}
             <ConfirmDialog />

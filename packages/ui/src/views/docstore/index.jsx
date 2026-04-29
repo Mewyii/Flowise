@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 
@@ -58,7 +58,6 @@ const Documents = () => {
     const enqueueSnackbar = (...args) => dispatch(enqueueSnackbarAction(...args))
     const closeSnackbar = (...args) => dispatch(closeSnackbarAction(...args))
 
-    const [isLoading, setLoading] = useState(true)
     const [images, setImages] = useState({})
     const [search, setSearch] = useState('')
     const [showDialog, setShowDialog] = useState(false)
@@ -79,12 +78,6 @@ const Documents = () => {
         if (nextView === null) return
         localStorage.setItem('docStoreDisplayStyle', nextView)
         setView(nextView)
-    }
-
-    function filterDocStores(data) {
-        return (
-            data.name.toLowerCase().indexOf(search.toLowerCase()) > -1 || data.description.toLowerCase().indexOf(search.toLowerCase()) > -1
-        )
     }
 
     const onSearchChange = (event) => {
@@ -259,6 +252,16 @@ const Documents = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            setCurrentPage(1)
+            applyFilters(1, pageLimit)
+        }, 300)
+
+        return () => clearTimeout(timeoutId)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search])
+
     /* Table Pagination */
     const [currentPage, setCurrentPage] = useState(1)
     const [pageLimit, setPageLimit] = useState(() => Number(localStorage.getItem('docStorePageSize') || DEFAULT_ITEMS_PER_PAGE))
@@ -271,16 +274,16 @@ const Documents = () => {
     }
 
     const applyFilters = (page, limit) => {
-        setLoading(true)
         const params = {
             page: page || currentPage,
-            limit: limit || pageLimit
+            limit: limit || pageLimit,
+            searchTerm: search || undefined
         }
         getAllDocumentStores.request(params)
     }
 
     useEffect(() => {
-        if (getAllDocumentStores.data) {
+        if (!getAllDocumentStores.loading && getAllDocumentStores.data?.data) {
             try {
                 const { data, total } = getAllDocumentStores.data
                 if (!Array.isArray(data)) return
@@ -311,11 +314,7 @@ const Documents = () => {
                 console.error(e)
             }
         }
-    }, [getAllDocumentStores.data])
-
-    useEffect(() => {
-        setLoading(getAllDocumentStores.loading)
-    }, [getAllDocumentStores.loading])
+    }, [getAllDocumentStores.loading, getAllDocumentStores.data])
 
     const hasDocStores = docStores && docStores.length > 0
 
@@ -327,45 +326,43 @@ const Documents = () => {
                 <Stack flexDirection='column' sx={{ gap: 3 }}>
                     <ViewHeader
                         onSearchChange={onSearchChange}
-                        search={hasDocStores}
+                        search={true}
                         searchPlaceholder='Search Name'
                         title='Document Store'
                         description='Store and upsert documents for LLM retrieval (RAG)'
                     >
-                        {hasDocStores && (
-                            <ToggleButtonGroup
-                                sx={{ borderRadius: 2, maxHeight: 40 }}
-                                value={view}
-                                color='primary'
-                                exclusive
-                                onChange={handleChange}
+                        <ToggleButtonGroup
+                            sx={{ borderRadius: 2, maxHeight: 40 }}
+                            value={view}
+                            color='primary'
+                            exclusive
+                            onChange={handleChange}
+                        >
+                            <ToggleButton
+                                sx={{
+                                    borderColor: theme.palette.grey[900] + 25,
+                                    borderRadius: 2,
+                                    color: theme?.customization?.isDarkMode ? 'white' : 'inherit'
+                                }}
+                                variant='contained'
+                                value='card'
+                                title='Card View'
                             >
-                                <ToggleButton
-                                    sx={{
-                                        borderColor: theme.palette.grey[900] + 25,
-                                        borderRadius: 2,
-                                        color: theme?.customization?.isDarkMode ? 'white' : 'inherit'
-                                    }}
-                                    variant='contained'
-                                    value='card'
-                                    title='Card View'
-                                >
-                                    <IconLayoutGrid />
-                                </ToggleButton>
-                                <ToggleButton
-                                    sx={{
-                                        borderColor: theme.palette.grey[900] + 25,
-                                        borderRadius: 2,
-                                        color: theme?.customization?.isDarkMode ? 'white' : 'inherit'
-                                    }}
-                                    variant='contained'
-                                    value='list'
-                                    title='List View'
-                                >
-                                    <IconList />
-                                </ToggleButton>
-                            </ToggleButtonGroup>
-                        )}
+                                <IconLayoutGrid />
+                            </ToggleButton>
+                            <ToggleButton
+                                sx={{
+                                    borderColor: theme.palette.grey[900] + 25,
+                                    borderRadius: 2,
+                                    color: theme?.customization?.isDarkMode ? 'white' : 'inherit'
+                                }}
+                                variant='contained'
+                                value='list'
+                                title='List View'
+                            >
+                                <IconList />
+                            </ToggleButton>
+                        </ToggleButtonGroup>
                         <StyledPermissionButton
                             permissionId={'documentStores:create'}
                             variant='contained'
@@ -377,7 +374,55 @@ const Documents = () => {
                             Add New
                         </StyledPermissionButton>
                     </ViewHeader>
-                    {!hasDocStores ? (
+                    {!view || view === 'card' ? (
+                        <Box display='grid' gridTemplateColumns='repeat(3, 1fr)' gap={gridSpacing}>
+                            {docStores?.map((data) => (
+                                <Box key={data.id} sx={{ position: 'relative' }}>
+                                    <DocumentStoreCard
+                                        images={images[data.id]}
+                                        data={data}
+                                        hasActions={canManageDocumentStore}
+                                        onClick={() => goToDocumentStore(data.id)}
+                                    />
+                                    {canManageDocumentStore && (
+                                        <IconButton
+                                            size='small'
+                                            aria-label='Document store actions'
+                                            sx={{
+                                                position: 'absolute',
+                                                top: 16,
+                                                right: 10,
+                                                zIndex: 2,
+                                                width: 30,
+                                                height: 30,
+                                                ...getDocStoreActionButtonSx(theme),
+                                                [theme.breakpoints.down('sm')]: {
+                                                    top: 8,
+                                                    right: 8,
+                                                    width: 28,
+                                                    height: 28
+                                                }
+                                            }}
+                                            onClick={(event) => handleActionMenuOpen(event, data)}
+                                        >
+                                            <IconDotsVertical size={18} />
+                                        </IconButton>
+                                    )}
+                                </Box>
+                            ))}
+                        </Box>
+                    ) : (
+                        <DocumentStoreTable
+                            isLoading={getAllDocumentStores.loading}
+                            data={docStores}
+                            images={images}
+                            onRowClick={(row) => goToDocumentStore(row.id)}
+                            showActions={canManageDocumentStore}
+                            onActionMenuClick={handleActionMenuOpen}
+                            actionButtonSx={getDocStoreActionButtonSx(theme)}
+                        />
+                    )}
+                    {!getAllDocumentStores.loading && !hasDocStores && (
                         <Stack sx={{ alignItems: 'center', justifyContent: 'center' }} flexDirection='column'>
                             <Box sx={{ p: 2, height: 'auto' }}>
                                 <img
@@ -386,62 +431,11 @@ const Documents = () => {
                                     alt='doc_store_empty'
                                 />
                             </Box>
-                            <div>No Document Stores Created Yet</div>
+                            {!search && <div>No Document Stores Created Yet</div>}
+                            {search && <div>No Document Stores Found</div>}
                         </Stack>
-                    ) : (
-                        <React.Fragment>
-                            {!view || view === 'card' ? (
-                                <Box display='grid' gridTemplateColumns='repeat(3, 1fr)' gap={gridSpacing}>
-                                    {docStores?.filter(filterDocStores).map((data) => (
-                                        <Box key={data.id} sx={{ position: 'relative' }}>
-                                            <DocumentStoreCard
-                                                images={images[data.id]}
-                                                data={data}
-                                                hasActions={canManageDocumentStore}
-                                                onClick={() => goToDocumentStore(data.id)}
-                                            />
-                                            {canManageDocumentStore && (
-                                                <IconButton
-                                                    size='small'
-                                                    aria-label='Document store actions'
-                                                    sx={{
-                                                        position: 'absolute',
-                                                        top: 16,
-                                                        right: 10,
-                                                        zIndex: 2,
-                                                        width: 30,
-                                                        height: 30,
-                                                        ...getDocStoreActionButtonSx(theme),
-                                                        [theme.breakpoints.down('sm')]: {
-                                                            top: 8,
-                                                            right: 8,
-                                                            width: 28,
-                                                            height: 28
-                                                        }
-                                                    }}
-                                                    onClick={(event) => handleActionMenuOpen(event, data)}
-                                                >
-                                                    <IconDotsVertical size={18} />
-                                                </IconButton>
-                                            )}
-                                        </Box>
-                                    ))}
-                                </Box>
-                            ) : (
-                                <DocumentStoreTable
-                                    isLoading={isLoading}
-                                    data={docStores?.filter(filterDocStores)}
-                                    images={images}
-                                    onRowClick={(row) => goToDocumentStore(row.id)}
-                                    showActions={canManageDocumentStore}
-                                    onActionMenuClick={handleActionMenuOpen}
-                                    actionButtonSx={getDocStoreActionButtonSx(theme)}
-                                />
-                            )}
-                            {/* Pagination and Page Size Controls */}
-                            <TablePagination currentPage={currentPage} limit={pageLimit} total={total} onChange={onChange} />
-                        </React.Fragment>
                     )}
+                    <TablePagination currentPage={currentPage} limit={pageLimit} total={total} onChange={onChange} />
                 </Stack>
             )}
             {showDialog && (

@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from 'express'
-import { InternalFlowiseError } from '../../errors/internalFlowiseError'
+import { NextFunction, Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
+import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import evaluationsService from '../../services/evaluations'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const createEvaluation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -101,7 +101,7 @@ const deleteEvaluation = async (req: Request, res: Response, next: NextFunction)
 
 const getAllEvaluations = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const workspaceId = req.user?.activeWorkspaceId
         if (!workspaceId) {
             throw new InternalFlowiseError(

@@ -1,15 +1,15 @@
-import { Request, Response, NextFunction } from 'express'
-import { ChatMessageRatingType, ChatType, IReactFlowObject } from '../../Interface'
-import chatflowsService from '../../services/chatflows'
-import chatMessagesService from '../../services/chat-messages'
-import { aMonthAgo, clearSessionMemory } from '../../utils'
-import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
+import { NextFunction, Request, Response } from 'express'
+import { StatusCodes } from 'http-status-codes'
 import { Between, DeleteResult, FindOptionsWhere, In } from 'typeorm'
 import { ChatMessage } from '../../database/entities/ChatMessage'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
-import { StatusCodes } from 'http-status-codes'
+import { ChatMessageRatingType, ChatType, IReactFlowObject } from '../../Interface'
+import chatMessagesService from '../../services/chat-messages'
+import chatflowsService from '../../services/chatflows'
+import { aMonthAgo, clearSessionMemory } from '../../utils'
 import { utilGetChatMessage } from '../../utils/getChatMessage'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const getFeedbackTypeFilters = (_feedbackTypeFilters: ChatMessageRatingType[]): ChatMessageRatingType[] | undefined => {
     try {
@@ -73,7 +73,7 @@ const getAllChatMessages = async (req: Request, res: Response, next: NextFunctio
         const endDate = req.query?.endDate as string | undefined
         const feedback = req.query?.feedback as boolean | undefined
 
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
 
         let feedbackTypeFilters = req.query?.feedbackType as ChatMessageRatingType[] | undefined
         if (feedbackTypeFilters) {

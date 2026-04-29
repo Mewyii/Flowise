@@ -1,12 +1,12 @@
 import { NextFunction, Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
-import documentStoreService from '../../services/documentstore'
 import { DocumentStore } from '../../database/entities/DocumentStore'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { DocumentStoreDTO } from '../../Interface'
-import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { FLOWISE_COUNTER_STATUS, FLOWISE_METRIC_COUNTERS } from '../../Interface.Metrics'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import documentStoreService from '../../services/documentstore'
+import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const createDocumentStore = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -44,7 +44,7 @@ const createDocumentStore = async (req: Request, res: Response, next: NextFuncti
 
 const getAllDocumentStores = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit, searchTerm } = getPageLimitAndSearchParams(req)
 
         const workspaceId = req.user?.activeWorkspaceId
         if (!workspaceId) {
@@ -53,7 +53,7 @@ const getAllDocumentStores = async (req: Request, res: Response, next: NextFunct
                 `Error: documentStoreController.getAllDocumentStores - workspaceId not provided!`
             )
         }
-        const apiResponse: any = await documentStoreService.getAllDocumentStores(workspaceId, page, limit)
+        const apiResponse: any = await documentStoreService.getAllDocumentStores(workspaceId, page, limit, searchTerm)
         if (apiResponse?.total >= 0) {
             return res.json({
                 total: apiResponse.total,

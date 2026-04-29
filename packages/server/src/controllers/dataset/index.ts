@@ -1,13 +1,13 @@
-import { Request, Response, NextFunction } from 'express'
+import { NextFunction, Request, Response } from 'express'
+import { StatusCodes } from 'http-status-codes'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import datasetService from '../../services/dataset'
-import { StatusCodes } from 'http-status-codes'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 import { stripProtectedFields } from '../../utils/stripProtectedFields'
 
 const getAllDatasets = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const workspaceId = req.user?.activeWorkspaceId
         if (!workspaceId) {
             throw new InternalFlowiseError(
@@ -27,7 +27,7 @@ const getDataset = async (req: Request, res: Response, next: NextFunction) => {
         if (typeof req.params === 'undefined' || !req.params.id) {
             throw new InternalFlowiseError(StatusCodes.PRECONDITION_FAILED, `Error: datasetService.getDataset - id not provided!`)
         }
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const workspaceId = req.user?.activeWorkspaceId
         if (!workspaceId) {
             throw new InternalFlowiseError(

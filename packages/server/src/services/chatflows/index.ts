@@ -15,13 +15,13 @@ import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { getErrorMessage } from '../../errors/utils'
 import documentStoreService from '../../services/documentstore'
 import { constructGraphs, getAppVersion, getEndingNodes, getTelemetryFlowObj, isFlowValidForStream } from '../../utils'
-import { sanitizeAllowedUploadMimeTypesFromConfig } from '../../utils/fileValidation'
 import { containsBase64File, updateFlowDataWithFilePaths } from '../../utils/fileRepository'
-import { sanitizeFlowDataForPublicEndpoint } from '../../utils/sanitizeFlowData'
+import { sanitizeAllowedUploadMimeTypesFromConfig } from '../../utils/fileValidation'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { utilGetUploadsConfig } from '../../utils/getUploadsConfig'
 import logger from '../../utils/logger'
 import { updateStorageUsage } from '../../utils/quotaUsage'
+import { sanitizeFlowDataForPublicEndpoint } from '../../utils/sanitizeFlowData'
 
 export const enum ChatflowErrorMessage {
     INVALID_CHATFLOW_TYPE = 'Invalid Chatflow Type',
@@ -143,7 +143,7 @@ const deleteChatflow = async (chatflowId: string, orgId: string, workspaceId: st
     }
 }
 
-const getAllChatflows = async (type?: ChatflowType, workspaceId?: string, page: number = -1, limit: number = -1) => {
+const getAllChatflows = async (type?: ChatflowType, workspaceId?: string, page: number = -1, limit: number = -1, searchTerm?: string) => {
     try {
         const appServer = getRunningExpressApp()
 
@@ -166,6 +166,17 @@ const getAllChatflows = async (type?: ChatflowType, workspaceId?: string, page: 
             queryBuilder.andWhere('chat_flow.type = :type', { type: 'CHATFLOW' })
         }
         if (workspaceId) queryBuilder.andWhere('chat_flow.workspaceId = :workspaceId', { workspaceId })
+
+        if (searchTerm) {
+            queryBuilder.andWhere(
+                new Brackets((qb) => {
+                    qb.where('LOWER(chat_flow.name) LIKE LOWER(:searchTerm)', { searchTerm: `%${searchTerm}%` }).orWhere(
+                        'LOWER(chat_flow.category) LIKE LOWER(:searchTerm)',
+                        { searchTerm: `%${searchTerm}%` }
+                    )
+                })
+            )
+        }
         const [data, total] = await queryBuilder.getManyAndCount()
 
         if (page > 0 && limit > 0) {

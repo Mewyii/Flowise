@@ -1,8 +1,4 @@
-import { useState } from 'react'
-import PropTypes from 'prop-types'
-import { useSelector } from 'react-redux'
-import moment from 'moment'
-import { styled } from '@mui/material/styles'
+import { useAuth } from '@/hooks/useAuth'
 import {
     Box,
     Chip,
@@ -20,10 +16,14 @@ import {
     Typography,
     useTheme
 } from '@mui/material'
+import { styled } from '@mui/material/styles'
 import { tableCellClasses } from '@mui/material/TableCell'
-import FlowListMenu from '../button/FlowListMenu'
+import moment from 'moment'
+import PropTypes from 'prop-types'
+import { useState } from 'react'
+import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/hooks/useAuth'
+import FlowListMenu from '../button/FlowListMenu'
 
 import MoreItemsTooltip from '../tooltip/MoreItemsTooltip'
 
@@ -55,7 +55,6 @@ export const FlowListTable = ({
     images = {},
     icons = {},
     isLoading,
-    filterFunction,
     updateFlowsApi,
     setError,
     isAgentCanvas,
@@ -188,7 +187,7 @@ export const FlowListTable = ({
                             </>
                         ) : (
                             <>
-                                {sortedData.filter(filterFunction).map((row, index) => (
+                                {sortedData.map((row, index) => (
                                     <StyledTableRow key={index}>
                                         <StyledTableCell key='0'>
                                             <Tooltip title={row.templateName || row.name}>
@@ -355,7 +354,6 @@ FlowListTable.propTypes = {
     images: PropTypes.object,
     icons: PropTypes.object,
     isLoading: PropTypes.bool,
-    filterFunction: PropTypes.func,
     updateFlowsApi: PropTypes.object,
     setError: PropTypes.func,
     isAgentCanvas: PropTypes.bool,

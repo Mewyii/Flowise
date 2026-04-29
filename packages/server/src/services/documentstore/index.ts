@@ -47,9 +47,9 @@ import { UpsertHistory } from '../../database/entities/UpsertHistory'
 import { getWorkspaceSearchOptions } from '../../enterprise/utils/ControllerServiceUtils'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import { getErrorMessage } from '../../errors/utils'
-import { validateFileMimeTypeAndExtensionMatch } from '../../utils/fileValidation'
 import { databaseEntities, getAppVersion, saveUpsertFlowData } from '../../utils'
 import { DOCUMENT_STORE_BASE_FOLDER, INPUT_PARAMS_TYPE, OMIT_QUEUE_JOB_DATA } from '../../utils/constants'
+import { validateFileMimeTypeAndExtensionMatch } from '../../utils/fileValidation'
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import logger from '../../utils/logger'
 import { DOCUMENTSTORE_TOOL_DESCRIPTION_PROMPT_GENERATOR } from '../../utils/prompt'
@@ -79,7 +79,7 @@ const createDocumentStore = async (newDocumentStore: DocumentStore, orgId: strin
     }
 }
 
-const getAllDocumentStores = async (workspaceId: string, page: number = -1, limit: number = -1) => {
+const getAllDocumentStores = async (workspaceId: string, page: number = -1, limit: number = -1, searchTerm?: string) => {
     try {
         const appServer = getRunningExpressApp()
         const queryBuilder = appServer.AppDataSource.getRepository(DocumentStore)
@@ -91,6 +91,10 @@ const getAllDocumentStores = async (workspaceId: string, page: number = -1, limi
             queryBuilder.take(limit)
         }
         queryBuilder.andWhere('doc_store.workspaceId = :workspaceId', { workspaceId })
+
+        if (searchTerm) {
+            queryBuilder.andWhere('LOWER(doc_store.name) LIKE LOWER(:searchTerm)', { searchTerm: `%${searchTerm}%` })
+        }
 
         const [data, total] = await queryBuilder.getManyAndCount()
 

@@ -3,7 +3,7 @@ import { StatusCodes } from 'http-status-codes'
 import { LoggedInUser } from '../../enterprise/Interface.Enterprise'
 import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import apikeyService from '../../services/apikey'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 // Get api keys
 const getAllApiKeys = async (req: Request, res: Response, next: NextFunction) => {
@@ -13,7 +13,7 @@ const getAllApiKeys = async (req: Request, res: Response, next: NextFunction) =>
         if (req.query?.type === 'organization' && user.isOrganizationAdmin)
             return res.status(StatusCodes.OK).json(await apikeyService.getAllApiKeysByOrganization(user.activeOrganizationId))
 
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const apiResponse = await apikeyService.getAllApiKeys(user, page, limit)
         return res.status(StatusCodes.OK).json(apiResponse)
     } catch (error) {

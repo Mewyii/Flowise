@@ -1,12 +1,12 @@
-import { Request, Response, NextFunction } from 'express'
-import { InternalFlowiseError } from '../../errors/internalFlowiseError'
+import { NextFunction, Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
+import { InternalFlowiseError } from '../../errors/internalFlowiseError'
 import evaluatorService from '../../services/evaluator'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
 
 const getAllEvaluators = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit } = getPageAndLimitParams(req)
+        const { page, limit } = getPageLimitAndSearchParams(req)
         const workspaceId = req.user?.activeWorkspaceId
         if (!workspaceId) {
             throw new InternalFlowiseError(

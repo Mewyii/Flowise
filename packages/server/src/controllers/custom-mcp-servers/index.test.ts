@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express'
+import { NextFunction, Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 
 jest.mock('../../services/custom-mcp-servers', () => ({
@@ -18,12 +18,12 @@ jest.mock('../../utils/pagination', () => ({
     getPageAndLimitParams: jest.fn()
 }))
 
-import customMcpServersController from './index'
 import customMcpServersService from '../../services/custom-mcp-servers'
-import { getPageAndLimitParams } from '../../utils/pagination'
+import { getPageLimitAndSearchParams } from '../../utils/pagination'
+import customMcpServersController from './index'
 
 const mockService = customMcpServersService as jest.Mocked<typeof customMcpServersService>
-const mockGetPageAndLimitParams = getPageAndLimitParams as jest.Mock
+const mockGetPageAndLimitParams = getPageLimitAndSearchParams as jest.Mock
 
 const makeReq = (overrides: Partial<Request> = {}): Request =>
     ({
