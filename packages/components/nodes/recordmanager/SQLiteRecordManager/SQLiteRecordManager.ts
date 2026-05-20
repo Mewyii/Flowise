@@ -1,8 +1,8 @@
+import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
+import path from 'path'
+import { DataSource } from 'typeorm'
 import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
 import { getBaseClasses, getUserHome } from '../../../src/utils'
-import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
-import { DataSource } from 'typeorm'
-import path from 'path'
 
 class SQLiteRecordManager_RecordManager implements INode {
     label: string
@@ -87,7 +87,7 @@ class SQLiteRecordManager_RecordManager implements INode {
                 name: 'sourceIdKey',
                 type: 'string',
                 description:
-                    'Key used to get the true source of document, to be compared against the record. Document metadata must contains SourceId Key',
+                    'The Metadata key used to get the true source of document, to be compared against the record. Supports simple keys ("source"), nested keys ("title.en") and composite keys ("source;loc.lines.from;loc.lines.to"). For nested properties use dot notation. Composite keys will be joined with ";"',
                 default: 'source',
                 placeholder: 'source',
                 additionalParams: true,

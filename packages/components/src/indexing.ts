@@ -1,8 +1,8 @@
+import { RecordManagerInterface, UUIDV5_NAMESPACE } from '@langchain/community/indexes/base'
+import { Document, DocumentInterface } from '@langchain/core/documents'
+import { sha256 } from '@langchain/core/utils/hash'
 import { VectorStore } from '@langchain/core/vectorstores'
 import { v5 as uuidv5 } from 'uuid'
-import { RecordManagerInterface, UUIDV5_NAMESPACE } from '@langchain/community/indexes/base'
-import { sha256 } from '@langchain/core/utils/hash'
-import { Document, DocumentInterface } from '@langchain/core/documents'
 import { IndexingResult } from './Interface'
 
 type Metadata = Record<string, unknown>
@@ -210,10 +210,32 @@ export function _deduplicateInOrder(hashedDocuments: HashedDocumentInterface[]):
 }
 
 export function _getSourceIdAssigner(sourceIdKey: StringOrDocFunc | null): (doc: DocumentInterface) => string | null {
-    if (sourceIdKey === null) {
+    const separator = ';'
+
+    if (!sourceIdKey) {
         return (_doc: DocumentInterface) => null
     } else if (typeof sourceIdKey === 'string') {
-        return (doc: DocumentInterface) => doc.metadata[sourceIdKey]
+        if (sourceIdKey.includes(separator)) {
+            const keys = sourceIdKey.split(separator).map((k) => k.trim())
+            return (doc: DocumentInterface) => {
+                let id = ''
+
+                for (const key of keys) {
+                    const value = getNestedMetadataProperty(doc.metadata, key)
+                    if (value === null) {
+                        return null
+                    }
+                    id += String(value) + separator
+                }
+
+                return id
+            }
+        } else {
+            return (doc: DocumentInterface) => {
+                const value = getNestedMetadataProperty(doc.metadata, sourceIdKey)
+                return value !== null ? String(value) : null
+            }
+        }
     } else if (typeof sourceIdKey === 'function') {
         return sourceIdKey
     } else {
@@ -375,4 +397,24 @@ export async function index(args: IndexArgs): Promise<IndexingResult> {
         totalKeys,
         addedDocs
     }
+}
+
+function getNestedMetadataProperty(obj: Record<string, any>, path: string): any {
+    if (!obj) {
+        return null
+    }
+
+    const keys = path.split('.')
+    let current = obj
+
+    for (const key of keys) {
+        const nestedObject = current[key]
+        if (nestedObject === null || nestedObject === undefined) {
+            return null
+        } else {
+            current = nestedObject
+        }
+    }
+
+    return current
 }

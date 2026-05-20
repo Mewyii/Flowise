@@ -1,7 +1,7 @@
-import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
-import { getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
 import { ListKeyOptions, RecordManagerInterface, UpdateOptions } from '@langchain/community/indexes/base'
 import { DataSource } from 'typeorm'
+import { ICommonObject, INode, INodeData, INodeParams } from '../../../src/Interface'
+import { getBaseClasses, getCredentialData, getCredentialParam } from '../../../src/utils'
 import { getHost, getSSL } from '../../vectorstores/Postgres/utils'
 import { getDatabase, getPort, getTableName } from './utils'
 
@@ -114,7 +114,7 @@ class PostgresRecordManager_RecordManager implements INode {
                 name: 'sourceIdKey',
                 type: 'string',
                 description:
-                    'Key used to get the true source of document, to be compared against the record. Document metadata must contains SourceId Key',
+                    'The Metadata key used to get the true source of document, to be compared against the record. Supports simple keys ("source"), nested keys ("title.en") and composite keys ("source;loc.lines.from;loc.lines.to"). For nested properties use dot notation. Composite keys will be joined with ";"',
                 default: 'source',
                 placeholder: 'source',
                 additionalParams: true,
