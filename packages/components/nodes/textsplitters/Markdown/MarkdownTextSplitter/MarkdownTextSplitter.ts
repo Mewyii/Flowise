@@ -1,6 +1,7 @@
-import { INode, INodeData, INodeParams } from '../../../src/Interface'
-import { getBaseClasses } from '../../../src/utils'
-import { MarkdownTextSplitter, MarkdownTextSplitterParams } from '@langchain/textsplitters'
+import { MarkdownTextSplitter } from '@langchain/textsplitters'
+import { INode, INodeData, INodeParams } from '../../../../src/Interface'
+import { getBaseClasses } from '../../../../src/utils'
+import { EnhancedMarkdownTextSplitter, EnhancedMarkdownTextSplitterParams } from '../EnhancedMarkdownTextSplitter'
 
 class MarkdownTextSplitter_TextSplitters implements INode {
     label: string
@@ -76,6 +77,25 @@ class MarkdownTextSplitter_TextSplitters implements INode {
                     }
                 ],
                 optional: true
+            },
+            {
+                label: 'Merge Small Chunks',
+                name: 'mergeSmallChunks',
+                type: 'options',
+                description:
+                    'If enabled, merge adjacent chunks after converting HTML to Markdown until the chunk size limit would be exceeded.',
+                default: 'enabled',
+                options: [
+                    {
+                        label: 'Enabled',
+                        name: 'enabled'
+                    },
+                    {
+                        label: 'Disabled',
+                        name: 'disabled'
+                    }
+                ],
+                optional: true
             }
         ]
     }
@@ -84,90 +104,18 @@ class MarkdownTextSplitter_TextSplitters implements INode {
         const chunkSize = nodeData.inputs?.chunkSize as string
         const chunkOverlap = nodeData.inputs?.chunkOverlap as string
         const splitByHeaders = nodeData.inputs?.splitByHeaders as string
+        const mergeSmallChunks = nodeData.inputs?.mergeSmallChunks as string
 
-        const obj = {} as MarkdownTextSplitterParams
+        const obj = {} as EnhancedMarkdownTextSplitterParams
 
         if (chunkSize) obj.chunkSize = parseInt(chunkSize, 10)
         if (chunkOverlap) obj.chunkOverlap = parseInt(chunkOverlap, 10)
+        if (mergeSmallChunks) obj.mergeSmallChunksEnabled = mergeSmallChunks === 'enabled'
+        if (splitByHeaders) obj.splitByHeaders = splitByHeaders
 
-        const splitter = new MarkdownTextSplitter(obj)
-
-        if (splitByHeaders && splitByHeaders !== 'disabled') {
-            return {
-                splitDocuments: async (documents: any[]) => {
-                    const results = []
-
-                    for (const doc of documents) {
-                        const chunks = await this.splitByHeaders(doc.pageContent, splitByHeaders, splitter)
-                        for (const chunk of chunks) {
-                            results.push({
-                                pageContent: chunk,
-                                metadata: { ...doc.metadata }
-                            })
-                        }
-                    }
-
-                    return results
-                },
-                splitText: async (text: string) => {
-                    return await this.splitByHeaders(text, splitByHeaders, splitter)
-                }
-            }
-        }
+        const splitter = new EnhancedMarkdownTextSplitter(obj)
 
         return splitter
-    }
-
-    private async splitByHeaders(text: string, headerLevel: string, fallbackSplitter: any): Promise<string[]> {
-        const maxLevel = this.getHeaderLevel(headerLevel)
-        if (maxLevel === 0) return await fallbackSplitter.splitText(text)
-
-        const lines = text.split('\n')
-        const sections: string[] = []
-        let currentSection: string[] = []
-
-        for (const line of lines) {
-            const isHeader = line.startsWith('#') && line.match(/^#{1,6}\s/)
-            const headerDepth = isHeader ? line.match(/^(#+)/)?.[1]?.length || 0 : 0
-
-            if (isHeader && headerDepth <= maxLevel) {
-                // Save previous section
-                if (currentSection.length > 0) {
-                    sections.push(currentSection.join('\n').trim())
-                }
-                // Start new section
-                currentSection = [line]
-            } else {
-                // Add line to current section
-                currentSection.push(line)
-            }
-        }
-
-        // Add final section
-        if (currentSection.length > 0) {
-            sections.push(currentSection.join('\n').trim())
-        }
-
-        return sections
-    }
-
-    private getHeaderLevel(headerLevel: string): number {
-        switch (headerLevel) {
-            case 'h1':
-                return 1
-            case 'h2':
-                return 2
-            case 'h3':
-                return 3
-            case 'h4':
-                return 4
-            case 'h5':
-                return 5
-            case 'h6':
-                return 6
-            default:
-                return 0
-        }
     }
 }
 

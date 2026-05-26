@@ -1,7 +1,8 @@
-import { INode, INodeData, INodeParams } from '../../../src/Interface'
-import { getBaseClasses } from '../../../src/utils'
-import { MarkdownTextSplitter, MarkdownTextSplitterParams } from '@langchain/textsplitters'
+import { Document } from '@langchain/core/documents'
 import { NodeHtmlMarkdown } from 'node-html-markdown'
+import { INode, INodeData, INodeParams } from '../../../../src/Interface'
+import { getBaseClasses } from '../../../../src/utils'
+import { EnhancedMarkdownTextSplitter, EnhancedMarkdownTextSplitterParams } from '../EnhancedMarkdownTextSplitter'
 
 class HtmlToMarkdownTextSplitter_TextSplitters implements INode {
     label: string
@@ -39,6 +40,25 @@ class HtmlToMarkdownTextSplitter_TextSplitters implements INode {
                 description: 'Number of characters to overlap between chunks. Default is 200.',
                 default: 200,
                 optional: true
+            },
+            {
+                label: 'Merge Small Chunks',
+                name: 'mergeSmallChunks',
+                type: 'options',
+                description:
+                    'If enabled, merge adjacent chunks after converting HTML to Markdown until the chunk size limit would be exceeded.',
+                default: 'enabled',
+                options: [
+                    {
+                        label: 'Enabled',
+                        name: 'enabled'
+                    },
+                    {
+                        label: 'Disabled',
+                        name: 'disabled'
+                    }
+                ],
+                optional: true
             }
         ]
     }
@@ -46,30 +66,39 @@ class HtmlToMarkdownTextSplitter_TextSplitters implements INode {
     async init(nodeData: INodeData): Promise<any> {
         const chunkSize = nodeData.inputs?.chunkSize as string
         const chunkOverlap = nodeData.inputs?.chunkOverlap as string
+        const mergeSmallChunks = nodeData.inputs?.mergeSmallChunks as string
 
-        const obj = {} as MarkdownTextSplitterParams
+        const obj = {} as EnhancedMarkdownTextSplitterParams
 
         if (chunkSize) obj.chunkSize = parseInt(chunkSize, 10)
         if (chunkOverlap) obj.chunkOverlap = parseInt(chunkOverlap, 10)
+        if (mergeSmallChunks) obj.mergeSmallChunksEnabled = mergeSmallChunks === 'enabled'
 
         const splitter = new HtmlToMarkdownTextSplitter(obj)
 
         return splitter
     }
 }
-class HtmlToMarkdownTextSplitter extends MarkdownTextSplitter implements MarkdownTextSplitterParams {
-    constructor(fields?: Partial<MarkdownTextSplitterParams>) {
+class HtmlToMarkdownTextSplitter extends EnhancedMarkdownTextSplitter implements EnhancedMarkdownTextSplitterParams {
+    constructor(fields?: EnhancedMarkdownTextSplitterParams) {
         {
             super(fields)
         }
     }
     splitText(text: string): Promise<string[]> {
-        return new Promise((resolve) => {
-            const markdown = NodeHtmlMarkdown.translate(text)
-            super.splitText(markdown).then((result) => {
-                resolve(result)
-            })
-        })
+        const markdown = NodeHtmlMarkdown.translate(text)
+        return super.splitText(markdown)
+    }
+    async splitDocuments(documents: Document[]): Promise<Document[]> {
+        const results: Document[] = []
+
+        for (const [index, doc] of documents.entries()) {
+            const chunks = await this.splitText(doc.pageContent)
+            const mergedChunks = this.mergeAdjacentChunks(chunks)
+
+            results.push(...this.getChunksWithMetaData(mergedChunks, doc.metadata, index))
+        }
+        return results
     }
 }
 module.exports = { nodeClass: HtmlToMarkdownTextSplitter_TextSplitters }
