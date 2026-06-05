@@ -2,9 +2,23 @@
  * Strictly no getRepository, appServer here, must be passed as parameter
  */
 
-import path from 'path'
+import { randomBytes } from 'crypto'
+import { AES, enc } from 'crypto-js'
+import {
+    convertChatHistoryToText,
+    FlowiseMemory,
+    getEncryptionKeyPath,
+    getInputVariables,
+    handleEscapeCharacters,
+    ICommonObject,
+    IDatabaseEntity,
+    IFileUpload,
+    IMessage,
+    StorageProviderFactory
+} from 'flowise-components'
 import fs from 'fs'
-import logger from './logger'
+import { cloneDeep, get, isEqual } from 'lodash'
+import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import {
     IChatFlow,
@@ -14,6 +28,7 @@ import {
     ICredentialReqBody,
     IDepthQueue,
     IExploredNode,
+    IncomingInput,
     INodeData,
     INodeDependencies,
     INodeDirectedGraph,
@@ -24,45 +39,30 @@ import {
     IReactFlowNode,
     IVariable,
     IVariableDict,
-    IVariableOverride,
-    IncomingInput
+    IVariableOverride
 } from '../Interface'
-import { cloneDeep, get, isEqual } from 'lodash'
-import {
-    convertChatHistoryToText,
-    getInputVariables,
-    handleEscapeCharacters,
-    getEncryptionKeyPath,
-    ICommonObject,
-    IDatabaseEntity,
-    IMessage,
-    FlowiseMemory,
-    IFileUpload,
-    StorageProviderFactory
-} from 'flowise-components'
-import { randomBytes } from 'crypto'
-import { AES, enc } from 'crypto-js'
+import logger from './logger'
 
-import { ChatFlow } from '../database/entities/ChatFlow'
-import { ChatMessage } from '../database/entities/ChatMessage'
-import { Credential } from '../database/entities/Credential'
-import { Tool } from '../database/entities/Tool'
-import { Assistant } from '../database/entities/Assistant'
-import { Lead } from '../database/entities/Lead'
-import { DataSource } from 'typeorm'
-import { CachePool } from '../CachePool'
-import { Variable } from '../database/entities/Variable'
-import { DocumentStore } from '../database/entities/DocumentStore'
-import { DocumentStoreFileChunk } from '../database/entities/DocumentStoreFileChunk'
-import { CustomMcpServer } from '../database/entities/CustomMcpServer'
-import { InternalFlowiseError } from '../errors/internalFlowiseError'
-import { StatusCodes } from 'http-status-codes'
 import {
     CreateSecretCommand,
     GetSecretValueCommand,
     SecretsManagerClient,
     SecretsManagerClientConfig
 } from '@aws-sdk/client-secrets-manager'
+import { StatusCodes } from 'http-status-codes'
+import { DataSource } from 'typeorm'
+import { CachePool } from '../CachePool'
+import { Assistant } from '../database/entities/Assistant'
+import { ChatFlow } from '../database/entities/ChatFlow'
+import { ChatMessage } from '../database/entities/ChatMessage'
+import { Credential } from '../database/entities/Credential'
+import { CustomMcpServer } from '../database/entities/CustomMcpServer'
+import { DocumentStore } from '../database/entities/DocumentStore'
+import { DocumentStoreFileChunk } from '../database/entities/DocumentStoreFileChunk'
+import { Lead } from '../database/entities/Lead'
+import { Tool } from '../database/entities/Tool'
+import { Variable } from '../database/entities/Variable'
+import { InternalFlowiseError } from '../errors/internalFlowiseError'
 
 export const QUESTION_VAR_PREFIX = 'question'
 export const FILE_ATTACHMENT_PREFIX = 'file_attachment'
@@ -572,7 +572,8 @@ export const buildFlow = async ({
         chatId,
         sessionId,
         chatHistory,
-        apiMessageId
+        apiMessageId,
+        ...overrideConfig
     }
     while (nodeQueue.length) {
         const { nodeId, depth } = nodeQueue.shift() as INodeQueue
