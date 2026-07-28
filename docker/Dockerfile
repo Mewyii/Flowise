@@ -1,7 +1,13 @@
+# Node.js version (overridable via build-arg from CI)
+ARG NODE_VERSION=24
+
 # Stage 1: Build stage
-FROM node:20-alpine AS build
+FROM node:${NODE_VERSION}-alpine AS build
 
 USER root
+
+# Install build dependencies
+RUN apk add --no-cache git python3 py3-pip make g++ build-base cairo-dev pango-dev
 
 # Skip downloading Chrome for Puppeteer (saves build time)
 ENV PUPPETEER_SKIP_DOWNLOAD=true
@@ -10,7 +16,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm install -g flowise
 
 # Stage 2: Runtime stage
-FROM node:20-alpine
+FROM node:${NODE_VERSION}-alpine
 
 # Install runtime dependencies
 RUN apk add --no-cache chromium git python3 py3-pip make g++ build-base cairo-dev pango-dev curl
@@ -21,5 +27,11 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 # Copy Flowise from the build stage
 COPY --from=build /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=build /usr/local/bin /usr/local/bin
+
+# Give the node user ownership of the installed package (node:*-alpine already has this user)
+RUN chown -R node:node /usr/local/lib/node_modules /usr/local/bin
+
+# Switch to non-root user
+USER node
 
 ENTRYPOINT ["flowise", "start"]
