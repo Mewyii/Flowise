@@ -2,7 +2,6 @@ import { BaseCache } from '@langchain/core/caches'
 import { AzureOpenAIInput, ChatOpenAIFields, AzureChatOpenAI as LangchainAzureChatOpenAI } from '@langchain/openai'
 import { OpenAI as OpenAIClient } from 'openai'
 import { ICommonObject, IMultiModalOption, INode, INodeData, INodeOptionsValue, INodeParams } from '../../../src/Interface'
-import { getModels, MODEL_TYPE } from '../../../src/modelLoader'
 import { getBaseClasses, getCredentialData, getCredentialParam, isReasoningModelOpenAI } from '../../../src/utils'
 import { AzureChatOpenAI } from './FlowiseAzureChatOpenAI'
 
@@ -25,10 +24,10 @@ class AzureChatOpenAI_ChatModels implements INode {
     inputs: INodeParams[]
 
     constructor() {
-        this.label = 'Azure OpenAI'
-        this.name = 'azureChatOpenAI'
+        this.label = 'Azure OpenAI V1'
+        this.name = 'azureChatOpenAIV1'
         this.version = 7.1
-        this.type = 'AzureChatOpenAI'
+        this.type = 'AzureChatOpenAIV1'
         this.icon = 'Azure.svg'
         this.category = 'Chat Models'
         this.description = 'Wrapper around Azure OpenAI large language models that use the Chat endpoint'
@@ -37,7 +36,7 @@ class AzureChatOpenAI_ChatModels implements INode {
             label: 'Connect Credential',
             name: 'credential',
             type: 'credential',
-            credentialNames: ['azureOpenAIApi'],
+            credentialNames: ['azureOpenAIApiV1'],
             optional: serverCredentialsExists
         }
         this.inputs = [
@@ -88,20 +87,19 @@ class AzureChatOpenAI_ChatModels implements INode {
                 optional: true
             },
             {
-                label: 'Reasoning',
-                description: 'Whether the model supports reasoning. Only applicable for reasoning models (gpt-5 and o-series models only)',
-                name: 'reasoning',
-                type: 'boolean',
-                default: false,
-                optional: true,
-                additionalParams: true
-            },
-            {
                 label: 'Reasoning Effort',
                 description: 'Constrains effort on reasoning. Only applicable for reasoning models (gpt-5 and o-series models only)',
                 name: 'reasoningEffort',
                 type: 'options',
                 options: [
+                    {
+                        label: 'None',
+                        name: 'none'
+                    },
+                    {
+                        label: 'Minimal',
+                        name: 'minimal'
+                    },
                     {
                         label: 'Low',
                         name: 'low'
@@ -115,57 +113,6 @@ class AzureChatOpenAI_ChatModels implements INode {
                         name: 'high'
                     }
                 ],
-                additionalParams: true,
-                show: {
-                    reasoning: true
-                }
-            },
-            {
-                label: 'Reasoning Summary',
-                description: `A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process`,
-                name: 'reasoningSummary',
-                type: 'options',
-                options: [
-                    {
-                        label: 'Auto',
-                        name: 'auto'
-                    },
-                    {
-                        label: 'Concise',
-                        name: 'concise'
-                    },
-                    {
-                        label: 'Detailed',
-                        name: 'detailed'
-                    }
-                ],
-                additionalParams: true,
-                show: {
-                    reasoning: true
-                }
-            },
-            {
-                label: 'Top Probability',
-                name: 'topP',
-                type: 'number',
-                step: 0.1,
-                optional: true,
-                additionalParams: true
-            },
-            {
-                label: 'Frequency Penalty',
-                name: 'frequencyPenalty',
-                type: 'number',
-                step: 0.1,
-                optional: true,
-                additionalParams: true
-            },
-            {
-                label: 'Presence Penalty',
-                name: 'presencePenalty',
-                type: 'number',
-                step: 0.1,
-                optional: true,
                 additionalParams: true
             },
             {
@@ -198,7 +145,7 @@ class AzureChatOpenAI_ChatModels implements INode {
     //@ts-ignore
     loadMethods = {
         async listModels(): Promise<INodeOptionsValue[]> {
-            return await getModels(MODEL_TYPE.CHAT, 'azureChatOpenAI')
+            return [{ name: 'gpt-5.4-mini', label: 'GPT-5.4-mini' }]
         }
     }
 
@@ -211,7 +158,6 @@ class AzureChatOpenAI_ChatModels implements INode {
         const timeout = nodeData.inputs?.timeout as string
         const streaming = nodeData.inputs?.streaming as boolean
         const cache = nodeData.inputs?.cache as BaseCache
-        const topP = nodeData.inputs?.topP as string
         const basePath = nodeData.inputs?.basepath as string
         const baseOptions = nodeData.inputs?.baseOptions
         const reasoningEffort = nodeData.inputs?.reasoningEffort as OpenAIClient.Chat.ChatCompletionReasoningEffort | null
@@ -221,7 +167,6 @@ class AzureChatOpenAI_ChatModels implements INode {
         const azureOpenAIApiKey = getCredentialParam('azureOpenAIApiKey', credentialData, nodeData)
         const azureOpenAIApiInstanceName = getCredentialParam('azureOpenAIApiInstanceName', credentialData, nodeData)
         const azureOpenAIApiDeploymentName = getCredentialParam('azureOpenAIApiDeploymentName', credentialData, nodeData)
-        const azureOpenAIApiVersion = getCredentialParam('azureOpenAIApiVersion', credentialData, nodeData)
 
         const allowImageUploads = nodeData.inputs?.allowImageUploads as boolean
 
@@ -231,7 +176,7 @@ class AzureChatOpenAI_ChatModels implements INode {
             azureOpenAIApiKey,
             azureOpenAIApiInstanceName,
             azureOpenAIApiDeploymentName,
-            azureOpenAIApiVersion,
+            azureOpenAIApiVersion: '2025-04-01-preview',
             streaming: streaming ?? true
         }
 
@@ -240,7 +185,6 @@ class AzureChatOpenAI_ChatModels implements INode {
         if (presencePenalty) obj.presencePenalty = parseFloat(presencePenalty)
         if (timeout) obj.timeout = parseInt(timeout, 10)
         if (cache) obj.cache = cache
-        if (topP) obj.topP = parseFloat(topP)
         if (basePath) obj.azureOpenAIBasePath = basePath
         if (baseOptions) {
             try {
@@ -253,8 +197,6 @@ class AzureChatOpenAI_ChatModels implements INode {
             }
         }
         if (isReasoningModelOpenAI(modelName)) {
-            delete obj.temperature
-            delete obj.stop
             const reasoning: OpenAIClient.Reasoning = {}
             if (reasoningEffort) {
                 reasoning.effort = reasoningEffort

@@ -149,7 +149,7 @@
         "stripe": "^15.6.0",
         "turndown": "^7.2.0",
         "typeorm": "^0.3.28",
-        "uuid": "^10.0.0",
+        "uuid": "^14.0.0",
         "winston": "^3.9.0",
         "winston-azure-blob": "^1.5.0",
         "winston-daily-rotate-file": "^5.0.0",
