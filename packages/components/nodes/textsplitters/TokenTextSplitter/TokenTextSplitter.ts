@@ -1,7 +1,7 @@
+import { TiktokenEncoding } from '@dqbd/tiktoken'
+import { TokenTextSplitter, TokenTextSplitterParams } from '@langchain/textsplitters'
 import { INode, INodeData, INodeParams } from '../../../src/Interface'
 import { getBaseClasses } from '../../../src/utils'
-import { TokenTextSplitter, TokenTextSplitterParams } from '@langchain/textsplitters'
-import { TiktokenEncoding } from '@dqbd/tiktoken'
 
 class TokenTextSplitter_TextSplitters implements INode {
     label: string
@@ -57,7 +57,7 @@ class TokenTextSplitter_TextSplitters implements INode {
                 name: 'chunkSize',
                 type: 'number',
                 description: 'Number of characters in each chunk. Default is 1000.',
-                default: 1000,
+                default: 9000,
                 optional: true
             },
             {
@@ -65,7 +65,7 @@ class TokenTextSplitter_TextSplitters implements INode {
                 name: 'chunkOverlap',
                 type: 'number',
                 description: 'Number of characters to overlap between chunks. Default is 200.',
-                default: 200,
+                default: 600,
                 optional: true
             }
         ]

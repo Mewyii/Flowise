@@ -1,11 +1,11 @@
-import { Keyv } from 'keyv'
 import KeyvRedis from '@keyv/redis'
 import { Cache, createCache } from 'cache-manager'
+import { StatusCodes } from 'http-status-codes'
+import { Keyv } from 'keyv'
 import { MODE } from './Interface'
-import { LICENSE_QUOTAS } from './utils/constants'
 import { StripeManager } from './StripeManager'
 import { InternalFlowiseError } from './errors/internalFlowiseError'
-import { StatusCodes } from 'http-status-codes'
+import { LICENSE_QUOTAS } from './utils/constants'
 
 const DISABLED_QUOTAS = {
     [LICENSE_QUOTAS.PREDICTIONS_LIMIT]: 0,
@@ -207,9 +207,9 @@ export class UsageCacheManager {
         }
     }
 
-    public set<T>(key: string, value: T, ttl?: number) {
+    public async set<T>(key: string, value: T, ttl?: number) {
         if (this.cache) {
-            this.cache.set(key, value, ttl)
+            await this.cache.set(key, value, ttl)
         }
     }
 

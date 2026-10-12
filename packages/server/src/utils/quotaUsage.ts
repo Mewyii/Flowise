@@ -145,9 +145,9 @@ export const checkPredictions = async (orgId: string, subscriptionId: string, us
 }
 
 // Storage does not renew per month nor do we store the total size in database, so we just store the total size in cache
-export const updateStorageUsage = (orgId: string, _: string = '', totalSize: number, usageCacheManager?: UsageCacheManager) => {
+export const updateStorageUsage = async (orgId: string, _: string = '', totalSize: number, usageCacheManager?: UsageCacheManager) => {
     if (!usageCacheManager) return
-    usageCacheManager.set(`storage:${orgId}`, totalSize)
+    await usageCacheManager.set(`storage:${orgId}`, totalSize)
 }
 
 export const checkStorage = async (orgId: string, subscriptionId: string, usageCacheManager: UsageCacheManager) => {

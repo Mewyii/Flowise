@@ -1040,35 +1040,25 @@ const _saveChunksToStorage = async (
 
         //step 7: remove all previous chunks
         await appDataSource.getRepository(DocumentStoreFileChunk).delete({ docId: newLoaderId })
-        if (response.chunks) {
+        if (response.chunks && response.chunks.length > 0) {
             //step 8: now save the new chunks
-            const totalChars = response.chunks.reduce((acc, chunk) => {
-                if (chunk.pageContent) {
-                    return acc + chunk.pageContent.length
-                }
-                return acc
-            }, 0)
-            await Promise.all(
-                response.chunks.map(async (chunk: IDocument, index: number) => {
-                    try {
-                        const docChunk: DocumentStoreFileChunk = {
-                            docId: newLoaderId,
-                            storeId: data.storeId || '',
-                            id: uuidv4(),
-                            chunkNo: index + 1,
-                            pageContent: sanitizeChunkContent(chunk.pageContent),
-                            metadata: JSON.stringify(chunk.metadata)
-                        }
-                        const dChunk = appDataSource.getRepository(DocumentStoreFileChunk).create(docChunk)
-                        await appDataSource.getRepository(DocumentStoreFileChunk).save(dChunk)
-                    } catch (chunkError) {
-                        throw new InternalFlowiseError(
-                            StatusCodes.INTERNAL_SERVER_ERROR,
-                            `Error: documentStoreServices._saveChunksToStorage - ${getErrorMessage(chunkError)}`
-                        )
-                    }
+            let totalChars = 0
+            const processedChunks = []
+
+            for (const [index, chunk] of response.chunks.entries()) {
+                processedChunks.push({
+                    docId: newLoaderId,
+                    storeId: data.storeId || '',
+                    id: uuidv4(),
+                    chunkNo: index + 1,
+                    pageContent: sanitizeChunkContent(chunk.pageContent),
+                    metadata: JSON.stringify(chunk.metadata)
                 })
-            )
+
+                totalChars += chunk.pageContent?.length ?? 0
+            }
+
+            await appDataSource.getRepository(DocumentStoreFileChunk).insert(processedChunks)
             // update the loader with the new metrics
             loader.totalChunks = response.totalChunks
             loader.totalChars = totalChars
