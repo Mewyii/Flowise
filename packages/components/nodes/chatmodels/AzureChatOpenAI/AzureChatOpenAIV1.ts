@@ -145,7 +145,10 @@ class AzureChatOpenAI_ChatModels implements INode {
     //@ts-ignore
     loadMethods = {
         async listModels(): Promise<INodeOptionsValue[]> {
-            return [{ name: 'gpt-5.4-mini', label: 'GPT-5.4-mini' }]
+            return [
+                { name: 'gpt-5.4-mini', label: 'GPT-5.4-mini' },
+                { name: 'gpt-6-luna', label: 'GPT-6-Luna' }
+            ]
         }
     }
 
